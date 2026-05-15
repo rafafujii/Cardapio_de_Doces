@@ -67,11 +67,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 // ... resto das importações se necessário, mas foquemos na AdminView no final do arquivo
 
-// Configuration
-const PHONE = "5544998542446";
-const SHEET_ID = "1LnFf7VKaV4CLedmpiLsWtgt_Z9bZJKuyLrPfevybQc0";
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-
+// Configuration placeholder - will be loaded from Firestore
 const PRODUCT_IMAGES: Record<string, string> = {
   "Brigadeiro Tradicional": "https://images.unsplash.com/photo-1590004953392-5aba2e785943?q=80&w=800&auto=format&fit=crop",
   "Brigadeiro de Ninho com Nutella": "https://images.unsplash.com/photo-1551024506-0bccd828d307?q=80&w=800&auto=format&fit=crop",
@@ -108,6 +104,40 @@ export default function App() {
   const [recipes, setRecipes] = useState<Record<string, any>>({});
   const [allReviews, setAllReviews] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [globalSettings, setGlobalSettings] = useState({
+    contactPhone: "5544998542446",
+    googleSheetId: "1LnFf7VKaV4CLedmpiLsWtgt_Z9bZJKuyLrPfevybQc0",
+    pixKey: "03972289960",
+    pickupAddress: "Avenida Padre Jose Stefanello, n°340"
+  });
+
+  // Global Settings Listener
+  useEffect(() => {
+    return onSnapshot(doc(db, 'settings', 'global'), (snap) => {
+      if (snap.exists()) {
+        setGlobalSettings(prev => ({ ...prev, ...snap.data() }));
+      }
+    });
+  }, []);
+
+  const updateGlobalSettings = async (data: any) => {
+    try {
+      await updateDoc(doc(db, 'settings', 'global'), {
+        ...data,
+        updatedAt: serverTimestamp()
+      }).catch(async (err) => {
+        if (err.message.includes('not-found') || err.message.includes('No document to update')) {
+          const { setDoc } = await import('firebase/firestore');
+          await setDoc(doc(db, 'settings', 'global'), {
+            ...data,
+            updatedAt: serverTimestamp()
+          });
+        }
+      });
+    } catch (err) {
+      console.error("Failed to update global settings", err);
+    }
+  };
 
   // Solicitar permissão de notificação
   useEffect(() => {
@@ -289,7 +319,8 @@ export default function App() {
     async function fetchData() {
       try {
         setLoading(true);
-        const response = await fetch(CSV_URL);
+        const url = `https://docs.google.com/spreadsheets/d/${globalSettings.googleSheetId}/gviz/tq?tqx=out:csv`;
+        const response = await fetch(url);
         const csvText = await response.text();
         
         Papa.parse(csvText, {
@@ -612,7 +643,7 @@ export default function App() {
       colors: ['#800020', '#D4AF37', '#ffffff']
     });
 
-    window.open(`https://wa.me/${PHONE}?text=${encodeURIComponent(msg)}`, '_blank');
+    window.open(`https://wa.me/${globalSettings.contactPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     
     // Clear cart and close everything
     setCart({});
@@ -623,7 +654,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
 
   const copyPix = () => {
-    navigator.clipboard.writeText("03972289960");
+    navigator.clipboard.writeText(globalSettings.pixKey);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -774,6 +805,7 @@ export default function App() {
                         item={item}
                         onAdd={() => addToCart(item)}
                         onViewImage={() => setSelectedImage(item.imageUrl)}
+                        contactPhone={globalSettings.contactPhone}
                       />
                     ))}
                   </div>
@@ -804,6 +836,8 @@ export default function App() {
             onModerateReview={moderateReview}
             onDeleteReview={deleteReview}
             catalog={catalog}
+            globalSettings={globalSettings}
+            onUpdateSettings={updateGlobalSettings}
           />
         ) : (
           <TrackingView orders={myOrders} onBack={() => setView('catalog')} />
@@ -1163,7 +1197,7 @@ const FilterButton: React.FC<{ children: React.ReactNode, active: boolean, onCli
   );
 };
 
-function ProductCard({ item, onAdd, onViewImage }: { item: Product, onAdd: () => void, onViewImage: () => void, key?: any }) {
+const ProductCard: React.FC<{ item: Product, onAdd: () => void, onViewImage: () => void, contactPhone: string }> = ({ item, onAdd, onViewImage, contactPhone }) => {
   const [showReviews, setShowReviews] = useState(false);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
@@ -1263,7 +1297,7 @@ function ProductCard({ item, onAdd, onViewImage }: { item: Product, onAdd: () =>
 
           {isConsult ? (
             <button 
-              onClick={() => window.open(`https://wa.me/${PHONE}?text=Olá! Gostaria de consultar o valor do doce: ${item.name}`, '_blank')}
+              onClick={() => window.open(`https://wa.me/${contactPhone}?text=Olá! Gostaria de consultar o valor do doce: ${item.name}`, '_blank')}
               className="w-full py-3 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 active:scale-95 transition-all text-xs flex items-center justify-center gap-2"
             >
               <MessageCircle className="w-4 h-4" />
@@ -1539,7 +1573,9 @@ function AdminView({
   reviews,
   onModerateReview,
   onDeleteReview,
-  catalog
+  catalog,
+  globalSettings,
+  onUpdateSettings
 }: { 
   orders: any[], 
   loading: boolean, 
@@ -1555,10 +1591,12 @@ function AdminView({
   reviews: any[],
   onModerateReview: (id: string, status: 'approved' | 'rejected') => void,
   onDeleteReview: (id: string) => void,
-  catalog: any[]
+  catalog: any[],
+  globalSettings: any,
+  onUpdateSettings: (data: any) => void
 }) {
   const [periodFilter, setPeriodFilter] = useState<'all' | 'week' | 'month' | 'year' | 'trash'>('all');
-  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'reviews'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'reviews' | 'settings'>('orders');
 
   const filteredOrders = useMemo(() => {
     const now = new Date();
@@ -1651,6 +1689,15 @@ function AdminView({
               </span>
             )}
           </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={cn(
+              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              activeTab === 'settings' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
+            )}
+          >
+            Configurações
+          </button>
         </div>
       </div>
 
@@ -1719,6 +1766,10 @@ function AdminView({
 
       {activeTab === 'reviews' && (
         <ReviewsTab reviews={reviews} onModerate={onModerateReview} onDelete={onDeleteReview} />
+      )}
+
+      {activeTab === 'settings' && (
+        <AdminSettingsTab settings={globalSettings} onSave={onUpdateSettings} />
       )}
     </div>
   );
@@ -1898,14 +1949,25 @@ function InventoryTab({
         ) : (
           <>
             <div className="p-8 border-b border-neutral-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-serif text-brand-wine italic">Ingredientes Base</h3>
-                <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mt-1">
-                  Gerencie custos de matéria-prima
-                </p>
+              <div className="flex items-center gap-6">
+                <div>
+                  <h3 className="text-xl font-serif text-brand-wine italic">Ingredientes Base</h3>
+                  <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mt-1">
+                    Gerencie custos de matéria-prima
+                  </p>
+                </div>
+                
+                {ingredients.some(i => (i.quantity || 0) <= (i.lowStockThreshold || 0) && (i.lowStockThreshold || 0) > 0) && (
+                  <div className="flex items-center gap-2 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100 animate-bounce">
+                    <TrendingDown className="w-3 h-3 text-red-600" />
+                    <span className="text-[10px] font-black text-red-600 uppercase">
+                      {ingredients.filter(i => (i.quantity || 0) <= (i.lowStockThreshold || 0) && (i.lowStockThreshold || 0) > 0).length} itens em falta
+                    </span>
+                  </div>
+                )}
               </div>
               <button 
-                onClick={() => setEditingIngredient({ name: '', unit: 'kg', costPerUnit: 0 })}
+                onClick={() => setEditingIngredient({ name: '', unit: 'kg', costPerUnit: 0, quantity: 0, lowStockThreshold: 0 })}
                 className="px-4 py-2 bg-brand-wine text-brand-gold text-[10px] font-black rounded-xl hover:bg-black transition-all flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
@@ -1915,8 +1977,8 @@ function InventoryTab({
 
             <div className="divide-y divide-neutral-100">
               {editingIngredient && (
-                <div className="p-8 bg-brand-cream/30 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-8 bg-brand-cream/30 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-neutral-400 uppercase ml-1">Nome</label>
                       <input 
@@ -1933,16 +1995,16 @@ function InventoryTab({
                         value={editingIngredient.unit}
                         onChange={(e) => setEditingIngredient({ ...editingIngredient, unit: e.target.value })}
                       >
-                        <option value="kg">Quilograma (kg)</option>
-                        <option value="g">Grama (g)</option>
-                        <option value="L">Litro (L)</option>
-                        <option value="ml">Mililitro (ml)</option>
+                        <option value="kg">Quilogramas (kg)</option>
+                        <option value="g">Gramas (g)</option>
+                        <option value="L">Litros (L)</option>
+                        <option value="ml">Mililitros (ml)</option>
                         <option value="un">Unidade (un)</option>
                         <option value="cx">Caixa (cx)</option>
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-neutral-400 uppercase ml-1">Custo por Unidade</label>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase ml-1">Custo/Un</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-neutral-400">R$</span>
                         <input 
@@ -1953,6 +2015,26 @@ function InventoryTab({
                           onChange={(e) => setEditingIngredient({ ...editingIngredient, costPerUnit: parseFloat(e.target.value) || 0 })}
                         />
                       </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-neutral-400 uppercase ml-1">Estoque Atual</label>
+                      <input 
+                        type="number"
+                        step="0.001"
+                        className="w-full p-2 border border-neutral-200 rounded-xl text-sm outline-none focus:border-brand-wine font-mono"
+                        value={editingIngredient.quantity || 0}
+                        onChange={(e) => setEditingIngredient({ ...editingIngredient, quantity: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-neutral-400 uppercase ml-1">Alerta Mínimo</label>
+                      <input 
+                        type="number"
+                        step="0.001"
+                        className="w-full p-2 border border-neutral-200 rounded-xl text-sm outline-none focus:border-brand-wine font-mono text-brand-wine"
+                        value={editingIngredient.lowStockThreshold || 0}
+                        onChange={(e) => setEditingIngredient({ ...editingIngredient, lowStockThreshold: parseFloat(e.target.value) || 0 })}
+                      />
                     </div>
                   </div>
                   <div className="flex justify-end gap-3">
@@ -1979,33 +2061,61 @@ function InventoryTab({
                 <div className="p-20 text-center text-neutral-400 italic">Nenhum ingrediente cadastrado.</div>
               )}
 
-              {ingredients.map(ing => (
-                <div key={ing.id} className="p-6 flex items-center justify-between hover:bg-neutral-50/50 transition-colors group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-neutral-100 rounded-xl flex items-center justify-center text-neutral-400">
-                      <Settings className="w-5 h-5" />
+              {ingredients.map(ing => {
+                const isLow = (ing.quantity || 0) <= (ing.lowStockThreshold || 0) && (ing.lowStockThreshold || 0) > 0;
+                
+                return (
+                  <div key={ing.id} className={cn(
+                    "p-6 flex items-center justify-between transition-colors group",
+                    isLow ? "bg-red-50/50 hover:bg-red-50" : "hover:bg-neutral-50/50"
+                  )}>
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                        isLow ? "bg-red-100 text-red-600 animate-pulse" : "bg-neutral-100 text-neutral-400"
+                      )}>
+                        {isLow ? <TrendingDown className="w-5 h-5" /> : <Settings className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-serif italic text-neutral-800">{ing.name}</p>
+                          {isLow && (
+                            <span className="text-[8px] font-black uppercase px-2 py-0.5 bg-red-600 text-white rounded-full">
+                              Estoque Baixo
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <p className="text-[10px] font-black text-neutral-400 uppercase">
+                            Preço: {formatCurrency(ing.costPerUnit)}/{ing.unit}
+                          </p>
+                          <span className="text-neutral-200">•</span>
+                          <p className={cn(
+                            "text-[10px] font-black uppercase",
+                            isLow ? "text-red-600" : "text-brand-wine"
+                          )}>
+                            Estoque: {ing.quantity || 0} {ing.unit}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-serif italic text-neutral-800">{ing.name}</p>
-                      <p className="text-[10px] font-black text-neutral-400 uppercase">1 {ing.unit} = {formatCurrency(ing.costPerUnit)}</p>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setEditingIngredient(ing)}
+                        className="p-2 text-neutral-400 hover:text-brand-wine transition-all"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => onDeleteIngredient(ing.id)}
+                        className="p-2 text-neutral-400 hover:text-red-500 transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => setEditingIngredient(ing)}
-                      className="p-2 text-neutral-400 hover:text-brand-wine transition-all"
-                    >
-                      <Settings className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => onDeleteIngredient(ing.id)}
-                      className="p-2 text-neutral-400 hover:text-red-500 transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -2432,6 +2542,82 @@ function TrackingView({ orders, onBack }: { orders: any[], onBack: () => void })
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+function AdminSettingsTab({ settings, onSave }: { settings: any, onSave: (data: any) => void }) {
+  const [formData, setFormData] = useState(settings);
+
+  useEffect(() => {
+    setFormData(settings);
+  }, [settings]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+    alert("Configurações atualizadas com sucesso!");
+  };
+
+  return (
+    <div className="bg-white rounded-[32px] border border-neutral-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 p-8 max-w-2xl">
+      <div className="mb-8">
+        <h3 className="text-xl font-serif text-brand-wine italic">Configurações Gerais</h3>
+        <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mt-1">
+          Ajuste as informações básicas do site
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-4">
+          <FormField label="WhatsApp para Contato" icon={<MessageCircle className="w-4 h-4" />}>
+            <input 
+              type="text" 
+              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
+              value={formData.contactPhone}
+              onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+              placeholder="Ex: 5544998542446"
+            />
+          </FormField>
+
+          <FormField label="ID da Planilha (Google Sheets)" icon={<LayoutGrid className="w-4 h-4" />}>
+            <input 
+              type="text" 
+              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all font-mono text-xs"
+              value={formData.googleSheetId}
+              onChange={(e) => setFormData({ ...formData, googleSheetId: e.target.value })}
+              placeholder="ID da sua Google Sheets"
+            />
+          </FormField>
+
+          <FormField label="Chave PIX" icon={<DollarSign className="w-4 h-4" />}>
+            <input 
+              type="text" 
+              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
+              value={formData.pixKey}
+              onChange={(e) => setFormData({ ...formData, pixKey: e.target.value })}
+              placeholder="Ex: Seu CPF ou E-mail"
+            />
+          </FormField>
+
+          <FormField label="Endereço de Retirada" icon={<Calendar className="w-4 h-4" />}>
+            <input 
+              type="text" 
+              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
+              value={formData.pickupAddress}
+              onChange={(e) => setFormData({ ...formData, pickupAddress: e.target.value })}
+              placeholder="Ex: Rua, Número, Bairro"
+            />
+          </FormField>
+        </div>
+
+        <button 
+          type="submit"
+          className="w-full py-4 bg-brand-wine text-brand-gold font-black rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xl shadow-brand-wine/20"
+        >
+          SALVAR ALTERAÇÕES
+        </button>
+      </form>
     </div>
   );
 }

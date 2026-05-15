@@ -77,6 +77,18 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["productName", "ingredients"]
+    },
+    "GlobalSettings": {
+      "title": "Global Settings",
+      "description": "General site-wide configuration",
+      "type": "object",
+      "properties": {
+        "contactPhone": { "type": "string" },
+        "googleSheetId": { "type": "string" },
+        "pixKey": { "type": "string" },
+        "pickupAddress": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
@@ -99,6 +111,10 @@
     "/recipes/{productName}": {
       "schema": "Recipe",
       "description": "Product recipe definitions"
+    },
+    "/settings/global": {
+      "schema": "GlobalSettings",
+      "description": "Global configuration document"
     }
   }
 }
