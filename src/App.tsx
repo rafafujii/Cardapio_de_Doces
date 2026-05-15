@@ -253,8 +253,13 @@ export default function App() {
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Login failed", err);
+      if (err.code === 'auth/unauthorized-domain') {
+        alert("Erro: Este domínio não está autorizado no Firebase Authentication. Adicione '" + window.location.hostname + "' aos domínios autorizados no console do Firebase.");
+      } else {
+        alert("Falha no login: " + err.message);
+      }
     }
   };
 
