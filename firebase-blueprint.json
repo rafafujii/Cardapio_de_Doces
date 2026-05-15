@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "Represents a sweet order submitted by a customer",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "items": { 
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "cancelled", "deleted"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deletedAt": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["customerName", "date", "time", "items", "total", "createdAt"]
+    },
+    "Inventory": {
+      "title": "Inventory",
+      "description": "Product cost and stock tracking",
+      "type": "object",
+      "properties": {
+        "productName": { "type": "string" },
+        "costPerUnit": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productName", "costPerUnit"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Product reviews and ratings",
+      "type": "object",
+      "properties": {
+        "productName": { "type": "string" },
+        "userName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productName", "userName", "rating", "status", "createdAt"]
+    },
+    "Ingredient": {
+      "title": "Ingredient",
+      "description": "Base ingredient for recipes",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "unit": { "type": "string" },
+        "costPerUnit": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "unit", "costPerUnit"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "Link between product and its ingredients",
+      "type": "object",
+      "properties": {
+        "productName": { "type": "string" },
+        "ingredients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ingredientId": { "type": "string" },
+              "quantity": { "type": "number" }
+            }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productName", "ingredients"]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of all customer orders"
+    },
+    "/inventory/{productName}": {
+      "schema": "Inventory",
+      "description": "Cost tracking per product type"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Product reviews from customers"
+    },
+    "/ingredients/{ingredientId}": {
+      "schema": "Ingredient",
+      "description": "Global ingredients list and costs"
+    },
+    "/recipes/{productName}": {
+      "schema": "Recipe",
+      "description": "Product recipe definitions"
+    }
+  }
+}

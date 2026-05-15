@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'rafaelhirofujii17@gmail.com' && request.auth.token.email_verified == true;
+    }
+
+    function isValidOrder(data) {
+      return data.customerName is string && data.customerName.size() <= 100 &&
+             data.date is string &&
+             data.time is string &&
+             data.total is number &&
+             data.items is list &&
+             (data.createdAt == request.time || data.createdAt == resource.data.createdAt);
+    }
+
+    match /orders/{orderId} {
+      // Anyone can submit an order
+      allow create: if isValidOrder(request.resource.data);
+      
+      // Only admin can see orders (even deleted ones)
+      allow read, list: if isAdmin();
+      
+      // Admins can update status, mark as deleted, etc.
+      allow update: if isAdmin();
+      
+      // Admins can permanently delete
+      allow delete: if isAdmin();
+    }
+
+    match /inventory/{productName} {
+      allow read, write: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      // Anyone can see approved reviews
+      allow read, list: if resource.data.status == 'approved' || isAdmin();
+      
+      // Signed in users can create a pending review
+      allow create: if isSignedIn() && 
+                    request.resource.data.status == 'pending' &&
+                    request.resource.data.rating >= 1 &&
+                    request.resource.data.rating <= 5 &&
+                    request.resource.data.createdAt == request.time;
+      
+      // Only admin can update (moderation) or delete
+      allow update, delete: if isAdmin();
+    }
+
+    match /ingredients/{ingredientId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /recipes/{productName} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
