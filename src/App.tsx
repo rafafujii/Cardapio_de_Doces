@@ -111,6 +111,8 @@ export default function App() {
     pickupAddress: "Avenida Padre Jose Stefanello, n°340"
   });
 
+  const isAdmin = user?.email === 'rafaelhirofujii17@gmail.com';
+
   // Global Settings Listener
   useEffect(() => {
     return onSnapshot(doc(db, 'settings', 'global'), (snap) => {
@@ -218,6 +220,15 @@ export default function App() {
     const savedOrderIds = JSON.parse(localStorage.getItem('myOrderIds') || '[]');
     if (savedOrderIds.length === 0) return;
 
+    // We only listen if we have specific IDs to avoid "Permission Denied" on full collection list
+    // Note: This requires the rule to allow get for these specific IDs or a query filter
+    // Since our current rules only allow admin, even this will fail for guests.
+    // If you want customers to track their orders, we need rules for it.
+    
+    // For now, only fetch if admin or if we explicitly allow it in rules.
+    // To avoid the error console noise, we only run if we expect it to succeed or we handle it.
+    if (!isAdmin && !auth.currentUser) return;
+
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     
     let initialLoad = true;
@@ -267,8 +278,6 @@ export default function App() {
     await signOut(auth);
     setView('catalog');
   };
-
-  const isAdmin = user?.email === 'rafaelhirofujii17@gmail.com';
 
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {

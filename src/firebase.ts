@@ -23,12 +23,17 @@ const config = {
   storageBucket: firebaseConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: firebaseConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: firebaseConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID,
-  firestoreDatabaseId: firebaseConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID
+  firestoreDatabaseId: firebaseConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)'
 };
+
+// Safeguard against common misconfigurations
+if (!config.apiKey || config.apiKey.includes('robotic-dialect') || config.apiKey === config.projectId) {
+  console.warn("Firebase API Key might be invalid. Check your configuration.");
+}
 
 const app = initializeApp(config);
 export const auth = getAuth(app);
-export const db = getFirestore(app, config.firestoreDatabaseId || '(default)');
+export const db = getFirestore(app);
 
 export const googleProvider = new GoogleAuthProvider();
 
