@@ -61,7 +61,8 @@ import {
   updateDoc,
   doc,
   onSnapshot,
-  deleteDoc
+  deleteDoc,
+  where
 } from './firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
@@ -83,6 +84,8 @@ const PRODUCT_IMAGES: Record<string, string> = {
   "Bebida": "https://images.unsplash.com/photo-1536939459926-301728717817?q=80&w=800&auto=format&fit=crop",
   "Coca-Cola": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=800&auto=format&fit=crop"
 };
+
+import { handleFirestoreError, OperationType } from './lib/firestoreErrors';
 
 export default function App() {
   // State
@@ -119,6 +122,10 @@ export default function App() {
       if (snap.exists()) {
         setGlobalSettings(prev => ({ ...prev, ...snap.data() }));
       }
+    }, (err: any) => {
+      // Missing or insufficient permissions expected initially if rules are not deployed properly.
+      // We gracefully swallow it and handle the error internally.
+      handleFirestoreError(err, OperationType.GET, 'settings/global');
     });
   }, []);
 
@@ -229,36 +236,40 @@ export default function App() {
     // To avoid the error console noise, we only run if we expect it to succeed or we handle it.
     if (!isAdmin && !auth.currentUser) return;
 
-    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-    
+    // Instead of listening to all orders (which is denied), we listen to individual orders
+    const unsubscribes: (() => void)[] = [];
     let initialLoad = true;
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const filtered = allOrders.filter(o => savedOrderIds.includes(o.id));
-      
-      // Notificar cliente se status mudar
-      if (!initialLoad) {
-        snapshot.docChanges().forEach(change => {
-          if (change.type === 'modified') {
-            const updatedOrder = change.doc.data();
-            if (savedOrderIds.includes(change.doc.id)) {
-              let statusMsg = "";
-              if (updatedOrder.status === 'ready') statusMsg = "Seu pedido está pronto para retirada! 🥳";
-              if (updatedOrder.status === 'completed') statusMsg = "Seu pedido foi entregue. Obrigado! ❤️";
-              
-              if (statusMsg) {
-                sendBrowserNotification("S.E Doces Gourmet", statusMsg);
-              }
+    
+    savedOrderIds.forEach((id: string) => {
+      const unsub = onSnapshot(doc(db, 'orders', id), (snap) => {
+        if (snap.exists()) {
+          const updated = { id: snap.id, ...snap.data() } as any;
+          setMyOrders(prev => {
+            const others = prev.filter(o => o.id !== id);
+            const newList = [...others, updated].sort((a, b) => {
+              const dateA = a.createdAt?.toDate?.() || new Date(0);
+              const dateB = b.createdAt?.toDate?.() || new Date(0);
+              return dateB - dateA;
+            });
+            
+            // Notification logic
+            if (!initialLoad) {
+              const statusMsg = updated.status === 'ready' ? "Seu pedido está pronto para retirada! 🥳" : 
+                                updated.status === 'completed' ? "Seu pedido foi entregue. Obrigado! ❤️" : "";
+              if (statusMsg) sendBrowserNotification("S.E Doces Gourmet", statusMsg);
             }
-          }
-        });
-      }
-
-      setMyOrders(filtered);
-      initialLoad = false;
+            
+            return newList;
+          });
+          initialLoad = false;
+        }
+      }, (err) => {
+        console.error(`Error tracking order ${id}:`, err);
+      });
+      unsubscribes.push(unsub);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribes.forEach(unsub => unsub());
   }, []);
 
   const handleLogin = async () => {
@@ -486,10 +497,14 @@ export default function App() {
           costs[d.data().productName] = d.data().costPerUnit;
         });
         setProductCosts(costs);
+      }, (err) => {
+        console.error("Admin Inventory Listener error:", err);
       });
 
       const unsubIngredients = onSnapshot(collection(db, 'ingredients'), (snap) => {
         setIngredients(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (err) => {
+        console.error("Admin Ingredients Listener error:", err);
       });
 
       const unsubRecipes = onSnapshot(collection(db, 'recipes'), (snap) => {
@@ -498,10 +513,14 @@ export default function App() {
           r[d.data().productName] = d.data().ingredients;
         });
         setRecipes(r);
+      }, (err) => {
+        console.error("Admin Recipes Listener error:", err);
       });
 
       const unsubReviews = onSnapshot(query(collection(db, 'reviews'), orderBy('createdAt', 'desc')), (snap) => {
         setAllReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, (err) => {
+        console.error("Admin Reviews Listener error:", err);
       });
 
       return () => {
@@ -1223,13 +1242,16 @@ const ProductCard: React.FC<{ item: Product, onAdd: () => void, onViewImage: () 
     if (showReviews) {
       const q = query(
         collection(db, 'reviews'), 
+        where('status', '==', 'approved'),
         orderBy('createdAt', 'desc')
       );
       return onSnapshot(q, (snap) => {
         setPReviews(snap.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter((r: any) => r.productName === item.name && (r.status === 'approved' || r.status === 'pending'))
+          .filter((r: any) => r.productName === item.name)
         );
+      }, (err) => {
+        console.error("Error loading reviews for product:", err);
       });
     }
   }, [showReviews, item.name]);
@@ -1282,8 +1304,8 @@ const ProductCard: React.FC<{ item: Product, onAdd: () => void, onViewImage: () 
         className="group relative bg-white rounded-3xl overflow-hidden border border-neutral-100 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 flex flex-col"
       >
         {item.badge && (
-          <div className="absolute top-4 left-4 z-10 bg-brand-gold text-brand-wine text-[10px] font-black px-3 py-1 rounded-full shadow-lg ring-1 ring-white/20 uppercase tracking-widest">
-            {item.badge}
+          <div className="absolute top-6 left-[-70px] z-20 w-[240px] bg-red-600 text-white text-[10px] font-black py-1.5 text-center shadow-lg shadow-red-600/30 uppercase tracking-wider transform -rotate-45 pointer-events-none border-y border-white/20">
+            <span className="block w-full text-center drop-shadow-sm">{item.badge}</span>
           </div>
         )}
         

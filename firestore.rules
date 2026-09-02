@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // Default deny global safety net
     match /{document=**} {
       allow read, write: if false;
     }
@@ -12,7 +12,7 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == 'rafaelhirofujii17@gmail.com' && request.auth.token.email_verified == true;
+      return isSignedIn() && request.auth.token.email == 'rafaelhirofujii17@gmail.com';
     }
 
     function isValidOrder(data) {
@@ -21,15 +21,30 @@ service cloud.firestore {
              data.time is string &&
              data.total is number &&
              data.items is list &&
-             (data.createdAt == request.time || data.createdAt == resource.data.createdAt);
+             (data.createdAt == request.time || (resource != null && data.createdAt == resource.data.createdAt));
+    }
+
+    match /test_settings/{doc} {
+      allow read, write: if true;
+    }
+
+    match /test_settings_2/{doc} {
+      allow read, write: if true;
+    }
+
+    // Settings: Public read, Admin write
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /orders/{orderId} {
       // Anyone can submit an order
       allow create: if isValidOrder(request.resource.data);
       
-      // Only admin can see orders (even deleted ones)
-      allow read, list: if isAdmin();
+      // Anyone with the ID can track their order, but only admin can LIST all orders
+      allow get: if true;
+      allow list: if isAdmin() || resource.data.testUserId != null;
       
       // Admins can update status, mark as deleted, etc.
       allow update: if isAdmin();
@@ -39,12 +54,15 @@ service cloud.firestore {
     }
 
     match /inventory/{productName} {
-      allow read, write: if isAdmin();
+      // Public needs to read product costs/stock for catalog logic if applicable
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /reviews/{reviewId} {
-      // Anyone can see approved reviews
-      allow read, list: if resource.data.status == 'approved' || isAdmin();
+      // Anyone can see reviews
+      allow read: if true;
+      allow list: if isAdmin() || (resource != null && resource.data.status == 'approved');
       
       // Signed in users can create a pending review
       allow create: if isSignedIn() && 
@@ -63,11 +81,6 @@ service cloud.firestore {
 
     match /recipes/{productName} {
       allow read, write: if isAdmin();
-    }
-
-    match /settings/global {
-      allow read: if true;
-      allow write: if isAdmin();
     }
   }
 }

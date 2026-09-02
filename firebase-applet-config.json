@@ -1,10 +1,10 @@
 {
   "projectId": "se-doces-gourmet",
-  "appId": "1:776149932188:web:bb46f7d64da6cd868fb559",
-  "apiKey": "AIzaSyA9e739XBo4iDg-pUKiqjL-DJJqyYLpMP8",
+  "appId": "1:776149932188:web:46f43aa2b1135e3d8fb559",
+  "apiKey": "AIzaSyA9e739XBo4iDg-pUKIqjL-DJJqyYLpMP8",
   "authDomain": "se-doces-gourmet.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
+  "firestoreDatabaseId": "ai-studio-e9e39544-401e-40f8-a1f0-7af5be59672b",
   "storageBucket": "se-doces-gourmet.firebasestorage.app",
   "messagingSenderId": "776149932188",
-  "measurementId": "G-GJMBDM67NW"
+  "measurementId": ""
 }
