@@ -12,16 +12,18 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == 'rafaelhirofujii17@gmail.com';
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'rafaelhirofujii17@gmail.com' ||
+        request.auth.token.email == 'rafaelhirofujii17@gmail.com'
+      );
     }
 
     function isValidOrder(data) {
-      return data.customerName is string && data.customerName.size() <= 100 &&
+      return data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 120 &&
              data.date is string &&
              data.time is string &&
              data.total is number &&
-             data.items is list &&
-             (data.createdAt == request.time || (resource != null && data.createdAt == resource.data.createdAt));
+             data.items is list;
     }
 
     match /test_settings/{doc} {
@@ -92,6 +94,7 @@ service cloud.firestore {
     match /ready_boxes/{boxId} {
       allow read: if true;
       allow write: if isAdmin();
+      allow update: if isAdmin() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantityAvailable', 'updatedAt']));
     }
 
     match /customer_notes/{customerKey} {

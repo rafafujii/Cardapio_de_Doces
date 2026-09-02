@@ -10,7 +10,7 @@ interface ReadyBoxOrderModalProps {
   onClose: () => void;
   box: ReadyBox | null;
   globalSettings?: any;
-  onSubmitOrder?: (orderDetails: OrderDetails, items: any[], total: number) => Promise<any>;
+  onSubmitOrder?: (orderDetails: OrderDetails, items: any[], total: number, boxId?: string) => Promise<any>;
 }
 
 export function ReadyBoxOrderModal({
@@ -63,7 +63,7 @@ export function ReadyBoxOrderModal({
 
     try {
       if (onSubmitOrder) {
-        await onSubmitOrder(orderDetails, items, box.price);
+        await onSubmitOrder(orderDetails, items, box.price, box.id);
       }
 
       // Format direct WhatsApp message for the confectioner

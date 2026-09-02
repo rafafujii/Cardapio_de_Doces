@@ -8,7 +8,7 @@ import { ReadyBoxOrderModal } from './ReadyBoxOrderModal';
 interface ReadyBoxesSectionProps {
   readyBoxes: ReadyBox[];
   globalSettings?: any;
-  onSubmitOrder?: (orderDetails: any, items: any[], total: number) => Promise<any>;
+  onSubmitOrder?: (orderDetails: any, items: any[], total: number, boxId?: string) => Promise<any>;
 }
 
 export function ReadyBoxesSection({

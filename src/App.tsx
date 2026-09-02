@@ -61,7 +61,7 @@ import {
   Tag
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { cn, formatCurrency, removeAcentos, getProductUnitPrice } from './lib/utils';
+import { cn, formatCurrency, removeAcentos, getProductUnitPrice, cleanFirestoreData } from './lib/utils';
 import { generateOrderPdf } from './lib/pdfGenerator';
 import { exportSalesToCsv, exportSalesToPdf, exportConsolidatedDREClosingReportPdf } from './lib/exportReports';
 import { playNewOrderNotification } from './lib/audioNotifier';
@@ -225,7 +225,7 @@ export function App() {
     customerName?: string;
   }>({ isOpen: false });
 
-  const isAdmin = user?.email === 'rafaelhirofujii17@gmail.com';
+  const isAdmin = user?.email?.toLowerCase() === 'rafaelhirofujii17@gmail.com';
   const previousAdminOrdersCount = React.useRef<number | null>(null);
 
   // Check URL params for review request (?avaliar=true&pedido=...&cliente=...)
@@ -269,14 +269,15 @@ export function App() {
   const updateGlobalSettings = async (data: any) => {
     try {
       const diff = calculateSettingsDiff(globalSettings, data);
+      const cleanData = cleanFirestoreData(data);
 
       await updateDoc(doc(db, 'settings', 'global'), {
-        ...data,
+        ...cleanData,
         updatedAt: serverTimestamp()
       }).catch(async () => {
         const { setDoc } = await import('firebase/firestore');
         await setDoc(doc(db, 'settings', 'global'), {
-          ...data,
+          ...cleanData,
           updatedAt: serverTimestamp()
         }, { merge: true });
       });
@@ -676,19 +677,28 @@ export function App() {
   const handleSaveReadyBox = async (boxData: Partial<ReadyBox> & { id?: string }) => {
     try {
       const { setDoc, addDoc } = await import('firebase/firestore');
-      if (boxData.id) {
-        const boxId = boxData.id;
-        const { id, ...rest } = boxData;
+      const cleanData = cleanFirestoreData(boxData);
+      
+      if (cleanData.id) {
+        const boxId = cleanData.id;
+        const { id, ...rest } = cleanData;
         await setDoc(doc(db, 'ready_boxes', boxId), {
           ...rest,
           updatedAt: serverTimestamp()
         }, { merge: true });
+        
+        // Optimistic UI update
+        setReadyBoxes(prev => prev.map(b => b.id === boxId ? { ...b, ...rest } as ReadyBox : b));
       } else {
-        await addDoc(collection(db, 'ready_boxes'), {
-          ...boxData,
+        const { id, ...rest } = cleanData;
+        const docRef = await addDoc(collection(db, 'ready_boxes'), {
+          ...rest,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
+        
+        // Optimistic UI update
+        setReadyBoxes(prev => [{ id: docRef.id, ...rest } as ReadyBox, ...prev]);
       }
     } catch (err) {
       console.error("Failed to save ready box", err);
@@ -700,6 +710,7 @@ export function App() {
     if (!window.confirm("Excluir esta caixinha de pronta entrega?")) return;
     try {
       await deleteDoc(doc(db, 'ready_boxes', id));
+      setReadyBoxes(prev => prev.filter(b => b.id !== id));
     } catch (err) {
       console.error("Failed to delete ready box", err);
     }
@@ -707,6 +718,7 @@ export function App() {
 
   const handleUpdateReadyBoxQuantity = async (id: string, newQuantity: number) => {
     try {
+      setReadyBoxes(prev => prev.map(b => b.id === id ? { ...b, quantityAvailable: newQuantity } : b));
       await updateDoc(doc(db, 'ready_boxes', id), {
         quantityAvailable: newQuantity,
         updatedAt: serverTimestamp()
@@ -718,6 +730,7 @@ export function App() {
 
   const handleToggleReadyBoxActive = async (id: string, currentActive: boolean) => {
     try {
+      setReadyBoxes(prev => prev.map(b => b.id === id ? { ...b, active: !currentActive } : b));
       await updateDoc(doc(db, 'ready_boxes', id), {
         active: !currentActive,
         updatedAt: serverTimestamp()
@@ -731,8 +744,9 @@ export function App() {
     try {
       const { setDoc } = await import('firebase/firestore');
       const cleanKey = phoneKey.replace(/\D/g, '') || phoneKey.replace(/\s+/g, '_').toLowerCase();
+      const cleanData = cleanFirestoreData(noteData);
       await setDoc(doc(db, 'customer_notes', cleanKey), {
-        ...noteData,
+        ...cleanData,
         updatedAt: serverTimestamp()
       }, { merge: true });
     } catch (err) {
@@ -747,16 +761,19 @@ export function App() {
       const code = (couponData.code || '').trim().toUpperCase();
       if (!code) throw new Error('Código do cupom é obrigatório');
 
-      if (couponData.id) {
-        const { id, ...rest } = couponData;
+      const cleanData = cleanFirestoreData(couponData);
+
+      if (cleanData.id) {
+        const { id, ...rest } = cleanData;
         await setDoc(doc(db, 'coupons', id), {
           ...rest,
           code,
           updatedAt: serverTimestamp()
         }, { merge: true });
       } else {
+        const { id, ...rest } = cleanData;
         await addDoc(collection(db, 'coupons'), {
-          ...couponData,
+          ...rest,
           code,
           usageCount: 0,
           createdAt: serverTimestamp(),
@@ -792,7 +809,7 @@ export function App() {
     }
   };
 
-  const handleReadyBoxOrderSubmit = async (orderDetails: OrderDetails, items: any[], total: number) => {
+  const handleReadyBoxOrderSubmit = async (orderDetails: OrderDetails, items: any[], total: number, boxId?: string) => {
     try {
       const docRef = await addDoc(collection(db, 'orders'), {
         customerName: orderDetails.name,
@@ -813,6 +830,23 @@ export function App() {
         status: 'pending',
         isReadyBoxOrder: true
       });
+
+      // Safely decrement quantity of the ready box if boxId provided
+      if (boxId) {
+        try {
+          const targetBox = readyBoxes.find(b => b.id === boxId);
+          if (targetBox && targetBox.quantityAvailable > 0) {
+            const nextQty = Math.max(0, targetBox.quantityAvailable - 1);
+            await updateDoc(doc(db, 'ready_boxes', boxId), {
+              quantityAvailable: nextQty,
+              updatedAt: serverTimestamp()
+            });
+            setReadyBoxes(prev => prev.map(b => b.id === boxId ? { ...b, quantityAvailable: nextQty } : b));
+          }
+        } catch (boxErr) {
+          console.warn("Could not auto-decrement box quantity:", boxErr);
+        }
+      }
 
       const existingIds = JSON.parse(localStorage.getItem('myOrderIds') || '[]');
       localStorage.setItem('myOrderIds', JSON.stringify([docRef.id, ...existingIds]));
@@ -842,10 +876,11 @@ export function App() {
   const updateIngredient = async (id: string | null, data: any) => {
     try {
       const { setDoc, addDoc } = await import('firebase/firestore');
+      const cleanData = cleanFirestoreData(data);
       if (id) {
-        await setDoc(doc(db, 'ingredients', id), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(doc(db, 'ingredients', id), { ...cleanData, updatedAt: serverTimestamp() }, { merge: true });
       } else {
-        await addDoc(collection(db, 'ingredients'), { ...data, updatedAt: serverTimestamp() });
+        await addDoc(collection(db, 'ingredients'), { ...cleanData, updatedAt: serverTimestamp() });
       }
     } catch (err) {
       console.error("Failed to update ingredient", err);
@@ -857,7 +892,7 @@ export function App() {
       const { setDoc } = await import('firebase/firestore');
       await setDoc(doc(db, 'recipes', productName.replace(/\//g, '_')), {
         productName,
-        ingredients: recipeItems,
+        ingredients: recipeItems.map(item => cleanFirestoreData(item)),
         updatedAt: serverTimestamp()
       }, { merge: true });
     } catch (err) {

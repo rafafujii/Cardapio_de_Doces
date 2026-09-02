@@ -110,14 +110,24 @@ export default defineConfig(({mode}) => {
       outDir: 'dist',
       emptyOutDir: true,
       sourcemap: false,
-      chunkSizeWarningLimit: 1500,
+      chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom'],
-            'vendor-firebase': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
-            'vendor-pdf': ['jspdf', 'jspdf-autotable'],
-            'vendor-ui': ['lucide-react', 'motion', 'canvas-confetti', 'recharts'],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('firebase')) {
+                return 'vendor-firebase';
+              }
+              if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('dompurify')) {
+                return 'vendor-pdf';
+              }
+              if (id.includes('recharts') || id.includes('lucide-react') || id.includes('canvas-confetti')) {
+                return 'vendor-ui';
+              }
+              if (id.includes('react') || id.includes('react-dom') || id.includes('motion')) {
+                return 'vendor-core';
+              }
+            }
           },
         },
       },

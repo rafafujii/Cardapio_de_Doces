@@ -67,23 +67,28 @@ export function AdminReadyBoxesTab({
 
     setIsSubmitting(true);
     try {
-      await onSaveBox({
-        id: editingBox ? editingBox.id : undefined,
+      const payload: Partial<ReadyBox> & { id?: string } = {
         title: title.trim(),
         description: description.trim(),
-        itemsCount: Number(itemsCount) || 6,
-        price: Number(price) || 0,
-        originalPrice: originalPrice ? Number(originalPrice) : undefined,
+        itemsCount: Math.max(1, Number(itemsCount) || 6),
+        price: Math.max(0, Number(price) || 0),
+        originalPrice: originalPrice ? Math.max(0, Number(originalPrice)) : 0,
         quantityAvailable: Math.max(0, Number(quantityAvailable) || 0),
-        pickupUntilTime: pickupUntilTime.trim(),
-        badgeText: badgeText.trim(),
+        pickupUntilTime: pickupUntilTime.trim() || 'Retirada hoje até às 19:30',
+        badgeText: badgeText.trim() || '🔥 Fornada Fresca de Hoje',
         active: true
-      });
+      };
+
+      if (editingBox && editingBox.id) {
+        payload.id = editingBox.id;
+      }
+
+      await onSaveBox(payload);
       setIsCreating(false);
       setEditingBox(null);
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao salvar caixinha de pronta entrega.');
+    } catch (err: any) {
+      console.error('Erro ao salvar caixinha:', err);
+      alert(`Erro ao salvar caixinha de pronta entrega: ${err?.message || 'Verifique sua conexão ou permissões.'}`);
     } finally {
       setIsSubmitting(false);
     }

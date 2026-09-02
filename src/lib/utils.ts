@@ -36,3 +36,20 @@ export function calculateProductCost(
   }
   return productCosts[productName] || 0;
 }
+
+/**
+ * Strips out any `undefined` values and ensures Firestore write compatibility
+ */
+export function cleanFirestoreData<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const cleanObj: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date) && !('_methodName' in value)) {
+        cleanObj[key] = cleanFirestoreData(value);
+      } else {
+        cleanObj[key] = value;
+      }
+    }
+  }
+  return cleanObj;
+}
