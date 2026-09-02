@@ -29,14 +29,11 @@ const config = {
   firestoreDatabaseId: firebaseConfig.firestoreDatabaseId || import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)'
 };
 
-// Log only in dev to debug
-if (import.meta.env.DEV) {
-  console.log("Firebase initialized with config:", config);
-}
-
 // Safeguard against common misconfigurations
 if (!config.apiKey || config.apiKey.includes('robotic-dialect') || config.apiKey === config.projectId) {
-  console.warn("Firebase API Key might be invalid. Check your configuration.");
+  if (import.meta.env.DEV) {
+    console.warn("Firebase API Key might be invalid. Check your configuration.");
+  }
 }
 
 const app = initializeApp(config);
@@ -48,16 +45,6 @@ const dbId = config.firestoreDatabaseId && config.firestoreDatabaseId !== '(defa
   : undefined;
 
 export const db = dbId ? getFirestore(app, dbId) : getFirestore(app);
-
-// Explicitly use the databaseId if specified and not (default)
-const databaseId = dbId || '(default)';
-
-console.log("ALL ENV:", import.meta.env);
-
-if (import.meta.env.DEV) {
-  console.log("Firebase App Initialized:", app.name);
-  console.log("Firestore Database Target:", databaseId);
-}
 
 export const googleProvider = new GoogleAuthProvider();
 

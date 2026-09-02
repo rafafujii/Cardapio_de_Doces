@@ -15,35 +15,56 @@ import {
   Area
 } from 'recharts';
 import { 
-  Search, 
   ShoppingBag, 
   X, 
   Instagram, 
-  MessageCircle, 
-  Copy, 
-  Check, 
   ChevronRight,
-  Info,
-  Clock,
+  Info, 
+  Plus, 
+  Minus, 
+  Trash2, 
+  History, 
+  LogOut, 
+  LogIn, 
+  LayoutGrid, 
+  Star, 
+  Settings, 
+  TrendingDown, 
+  TrendingUp, 
+  Package,
   Calendar,
-  User,
+  Clock,
   CreditCard,
+  Check,
+  MessageCircle,
   DollarSign,
-  Plus,
-  Minus,
-  Trash2,
-  History,
-  LogOut,
-  LogIn,
-  LayoutGrid,
-  Star,
-  Settings,
-  TrendingDown,
-  TrendingUp,
-  Package
+  Calculator,
+  Layers,
+  FileText,
+  Download,
+  AlertCircle,
+  Sparkles,
+  ChefHat,
+  FileSpreadsheet,
+  MapPin,
+  Store,
+  BellRing,
+  ShieldCheck,
+  CheckCircle2,
+  Truck,
+  Percent,
+  Volume2,
+  RotateCcw,
+  AlertTriangle,
+  Users,
+  MessageSquare
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { cn, formatCurrency, removeAcentos } from './lib/utils';
+import { cn, formatCurrency, removeAcentos, getProductUnitPrice } from './lib/utils';
+import { generateOrderPdf } from './lib/pdfGenerator';
+import { exportSalesToCsv, exportSalesToPdf } from './lib/exportReports';
+import { playNewOrderNotification } from './lib/audioNotifier';
+import { buildWhatsAppMessage, DEFAULT_WHATSAPP_TEMPLATE } from './lib/whatsappHelper';
 import type { Product, CartItem, CategoryGroup, OrderDetails } from './types';
 import { 
   auth, 
@@ -65,39 +86,58 @@ import {
   where
 } from './firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { DEFAULT_CATALOG, fetchCatalogWithFallback } from './defaultCatalog';
+import { HeroBanner } from './components/HeroBanner';
+import { QuickSearchChips } from './components/QuickSearchChips';
+import { ProductCard } from './components/ProductCard';
+import { ProductDetailsModal } from './components/ProductDetailsModal';
+import { CheckoutModal } from './components/CheckoutModal';
+import { EventSweetCalculatorModal } from './components/EventSweetCalculatorModal';
+import { MixedCentoModal } from './components/MixedCentoModal';
+import { AdminProductionTab } from './components/AdminProductionTab';
+import { AdminInventoryTab } from './components/AdminInventoryTab';
+import { AdminQuickRepliesTab } from './components/AdminQuickRepliesTab';
+import { QuickReplyModal } from './components/QuickReplyModal';
+import { AdminBatchCostCalculator } from './components/AdminBatchCostCalculator';
+import { ReadyBoxesSection } from './components/ReadyBoxesSection';
+import { AdminReadyBoxesTab } from './components/AdminReadyBoxesTab';
+import { AdminCrmTab } from './components/AdminCrmTab';
+import type { ReadyBox, CustomerNoteData, QuickReplyPhrase } from './types';
 
-// ... resto das importações se necessário, mas foquemos na AdminView no final do arquivo
+function sendBrowserNotification(title: string, body: string) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "granted") {
+    new Notification(title, { body, icon: '/favicon.ico' });
+  } else if (Notification.permission !== "denied") {
+    Notification.requestPermission().then(permission => {
+      if (permission === "granted") {
+        new Notification(title, { body, icon: '/favicon.ico' });
+      }
+    });
+  }
+}
 
-// Configuration placeholder - will be loaded from Firestore
-const PRODUCT_IMAGES: Record<string, string> = {
-  "Brigadeiro Tradicional": "https://images.unsplash.com/photo-1590004953392-5aba2e785943?q=80&w=800&auto=format&fit=crop",
-  "Brigadeiro de Ninho com Nutella": "https://images.unsplash.com/photo-1551024506-0bccd828d307?q=80&w=800&auto=format&fit=crop",
-  "Beijinho": "https://images.unsplash.com/photo-1621255554746-d250873ec488?q=80&w=800&auto=format&fit=crop",
-  "Bicho de Pé": "https://images.unsplash.com/photo-1511381939415-e44015466834?q=80&w=800&auto=format&fit=crop",
-  "Brigadeiro de Churros": "https://images.unsplash.com/photo-1582294125863-718258356942?q=80&w=800&auto=format&fit=crop",
-  "Casaninho": "https://images.unsplash.com/photo-1533038595180-f7ccc8967916?q=80&w=800&auto=format&fit=crop",
-  "Brigadeiro de Paçoca": "https://images.unsplash.com/photo-1603532648955-039310d9ed75?q=80&w=800&auto=format&fit=crop",
-  "Trufa": "https://images.unsplash.com/photo-1548907040-4baa42d10919?q=80&w=800&auto=format&fit=crop",
-  "Cone": "https://images.unsplash.com/photo-1501443762994-82bd5dace89a?q=80&w=800&auto=format&fit=crop",
-  "Pizza de Brownie": "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?q=80&w=800&auto=format&fit=crop",
-  "Fatia de Pizza": "https://images.unsplash.com/photo-1488477181946-6428a0291777?q=80&w=800&auto=format&fit=crop",
-  "Bebida": "https://images.unsplash.com/photo-1536939459926-301728717817?q=80&w=800&auto=format&fit=crop",
-  "Coca-Cola": "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=800&auto=format&fit=crop"
-};
-
-import { handleFirestoreError, OperationType } from './lib/firestoreErrors';
-
-export default function App() {
-  // State
-  const [catalog, setCatalog] = useState<CategoryGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+export function App() {
+  const [catalog, setCatalog] = useState<CategoryGroup[]>(() => {
+    try {
+      const cached = localStorage.getItem('docesGourmetCatalog');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_CATALOG;
+  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentCategory, setCurrentCategory] = useState('Todos');
   const [cart, setCart] = useState<Record<number, CartItem>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isEventCalculatorOpen, setIsEventCalculatorOpen] = useState(false);
+  const [isMixedCentoOpen, setIsMixedCentoOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [view, setView] = useState<'catalog' | 'admin' | 'tracking'>('catalog');
   const [adminOrders, setAdminOrders] = useState<any[]>([]);
@@ -106,15 +146,41 @@ export default function App() {
   const [ingredients, setIngredients] = useState<any[]>([]);
   const [recipes, setRecipes] = useState<Record<string, any>>({});
   const [allReviews, setAllReviews] = useState<any[]>([]);
+  const [readyBoxes, setReadyBoxes] = useState<ReadyBox[]>([]);
+  const [customerNotes, setCustomerNotes] = useState<Record<string, CustomerNoteData>>({});
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [globalSettings, setGlobalSettings] = useState({
     contactPhone: "5544998542446",
     googleSheetId: "1LnFf7VKaV4CLedmpiLsWtgt_Z9bZJKuyLrPfevybQc0",
     pixKey: "03972289960",
-    pickupAddress: "Avenida Padre Jose Stefanello, n°340"
+    pickupAddress: "Avenida Padre Jose Stefanello, n°340",
+    businessHours: "Ter a Dom • 10h às 18h",
+    storeStatusText: "Aceitando Encomendas & Pronta Entrega",
+    storeStatusMode: "open" as 'open' | 'limited' | 'paused',
+    announcementBanner: "",
+    instagramUrl: "https://instagram.com/s.e_docesgourmet",
+    minNoticeHours: 48,
+    blockedDates: [] as string[],
+    // Item 2: Delivery vs Pickup
+    deliveryMode: "delivery_and_pickup" as 'pickup_only' | 'delivery_and_pickup',
+    deliveryFeeType: "fixed" as 'fixed' | 'to_consult',
+    deliveryFixedFee: 10,
+    freeDeliveryThreshold: 0,
+    // Item 3: Volume Discounts
+    enableVolumeDiscount: true,
+    volumeDiscountMinItems: 200,
+    volumeDiscountPercent: 5,
+    volumeDiscountMessage: "🎉 Parabéns! Desconto de 5% aplicado para pedidos acima de 200 doces.",
+    // Item 4: Sound Notifications
+    enableOrderSoundNotification: true,
+    // Item 5: Custom WhatsApp Template
+    customWhatsAppTemplate: DEFAULT_WHATSAPP_TEMPLATE,
+    // Item 6: Global Minimum Stock Alert
+    globalMinStockAlert: 2
   });
 
   const isAdmin = user?.email === 'rafaelhirofujii17@gmail.com';
+  const previousAdminOrdersCount = React.useRef<number | null>(null);
 
   // Global Settings Listener
   useEffect(() => {
@@ -123,9 +189,7 @@ export default function App() {
         setGlobalSettings(prev => ({ ...prev, ...snap.data() }));
       }
     }, (err: any) => {
-      // Missing or insufficient permissions expected initially if rules are not deployed properly.
-      // We gracefully swallow it and handle the error internally.
-      handleFirestoreError(err, OperationType.GET, 'settings/global');
+      console.warn("Global settings notice:", err);
     });
   }, []);
 
@@ -135,127 +199,111 @@ export default function App() {
         ...data,
         updatedAt: serverTimestamp()
       }).catch(async (err) => {
-        if (err.message.includes('not-found') || err.message.includes('No document to update')) {
-          const { setDoc } = await import('firebase/firestore');
-          await setDoc(doc(db, 'settings', 'global'), {
-            ...data,
-            updatedAt: serverTimestamp()
-          });
-        }
+        const { setDoc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'settings', 'global'), {
+          ...data,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
       });
+      setGlobalSettings(prev => ({ ...prev, ...data }));
+      alert("Configurações atualizadas com sucesso!");
     } catch (err) {
-      console.error("Failed to update global settings", err);
+      console.error("Failed to update settings", err);
+      alert("Erro ao atualizar configurações.");
     }
   };
-
-  // Solicitar permissão de notificação
-  useEffect(() => {
-    if ("Notification" in window) {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  const sendBrowserNotification = (title: string, body: string) => {
-    if (Notification.permission === "granted") {
-      new Notification(title, { 
-        body, 
-        icon: '/favicon.ico' // O ícone pode ser ajustado conforme necessário
-      });
-    }
-  };
-  
-  // Checkout Form State
-  const [orderDetails, setOrderDetails] = useState<OrderDetails>({
-    name: localStorage.getItem('docesGourmetName') || '',
-    date: '',
-    time: '',
-    paymentMethod: 'Pix',
-    changeAmount: '',
-    notes: ''
-  });
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (u?.email !== 'rafaelhirofujii17@gmail.com') {
-        setView('catalog');
-      }
+    return onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
     });
-    return () => unsubscribe();
   }, []);
 
-  // Fetch Admin Orders (Real-time)
+  // Sync with Google Sheets with fallback
   useEffect(() => {
-    let unsubscribe: any;
+    let isMounted = true;
+    const loadCatalog = async () => {
+      try {
+        const sheetId = globalSettings.googleSheetId || '1LnFf7VKaV4CLedmpiLsWtgt_Z9bZJKuyLrPfevybQc0';
+        const data = await fetchCatalogWithFallback(sheetId);
+        if (isMounted && data && data.length > 0) {
+          setCatalog(data);
+          setError(null);
+        }
+      } catch (err: any) {
+        console.warn("Warning during catalog load:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
 
-    if (view === 'admin' && user?.email === 'rafaelhirofujii17@gmail.com') {
+    loadCatalog();
+    return () => { isMounted = false; };
+  }, [globalSettings.googleSheetId]);
+
+  // Orders Listener for Admin with Real-time Sound Notification (Item 4)
+  useEffect(() => {
+    if (view === 'admin' && isAdmin) {
       setLoadingOrders(true);
       const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-      
-      let initialLoad = true;
-      unsubscribe = onSnapshot(q, (snapshot) => {
-        const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const ordersData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
         
-        // Notificar apenas se for uma nova adição após o carregamento inicial
-        if (!initialLoad && snapshot.docChanges().some(change => change.type === 'added')) {
-          const newDoc = snapshot.docChanges().find(change => change.type === 'added')?.doc.data();
-          if (newDoc) {
-            sendBrowserNotification("🧁 Novo Pedido Recebido!", `Cliente: ${newDoc.customerName} - Total: ${formatCurrency(newDoc.total)}`);
-            // Som de sino (opcional se houver arquivo)
-            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-            audio.play().catch(() => {});
+        // Check if a new order arrived while in admin view
+        if (previousAdminOrdersCount.current !== null && snapshot.docs.length > previousAdminOrdersCount.current) {
+          if (globalSettings.enableOrderSoundNotification) {
+            playNewOrderNotification();
           }
+          sendBrowserNotification("S.E Doces Gourmet", "🔔 Novo pedido recebido no painel de administração!");
         }
-        
-        setAdminOrders(orders);
+        previousAdminOrdersCount.current = snapshot.docs.length;
+
+        setAdminOrders(ordersData);
         setLoadingOrders(false);
-        initialLoad = false;
-      }, (error) => {
-        console.error("Real-time listener failed", error);
+      }, (err) => {
+        console.error("Orders Listener error:", err);
         setLoadingOrders(false);
       });
+
+      return () => unsubscribe();
+    } else {
+      previousAdminOrdersCount.current = null;
     }
+  }, [view, isAdmin, globalSettings.enableOrderSoundNotification]);
 
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [view, user]);
-
-  // Fetch and Monitor My Orders (Real-time tracking for customer)
+  // Order Tracking Listener (Client)
   useEffect(() => {
-    const savedOrderIds = JSON.parse(localStorage.getItem('myOrderIds') || '[]');
+    const savedOrderIds: string[] = JSON.parse(localStorage.getItem('myOrderIds') || '[]');
     if (savedOrderIds.length === 0) return;
 
-    // We only listen if we have specific IDs to avoid "Permission Denied" on full collection list
-    // Note: This requires the rule to allow get for these specific IDs or a query filter
-    // Since our current rules only allow admin, even this will fail for guests.
-    // If you want customers to track their orders, we need rules for it.
-    
-    // For now, only fetch if admin or if we explicitly allow it in rules.
-    // To avoid the error console noise, we only run if we expect it to succeed or we handle it.
-    if (!isAdmin && !auth.currentUser) return;
-
-    // Instead of listening to all orders (which is denied), we listen to individual orders
-    const unsubscribes: (() => void)[] = [];
     let initialLoad = true;
-    
-    savedOrderIds.forEach((id: string) => {
-      const unsub = onSnapshot(doc(db, 'orders', id), (snap) => {
-        if (snap.exists()) {
-          const updated = { id: snap.id, ...snap.data() } as any;
+    const unsubscribes: (() => void)[] = [];
+
+    savedOrderIds.forEach(id => {
+      const unsub = onSnapshot(doc(db, 'orders', id), (docSnap) => {
+        if (docSnap.exists()) {
+          const updated: any = { id: docSnap.id, ...docSnap.data() };
           setMyOrders(prev => {
-            const others = prev.filter(o => o.id !== id);
-            const newList = [...others, updated].sort((a, b) => {
-              const dateA = a.createdAt?.toDate?.() || new Date(0);
-              const dateB = b.createdAt?.toDate?.() || new Date(0);
-              return dateB - dateA;
-            });
-            
-            // Notification logic
-            if (!initialLoad) {
-              const statusMsg = updated.status === 'ready' ? "Seu pedido está pronto para retirada! 🥳" : 
-                                updated.status === 'completed' ? "Seu pedido foi entregue. Obrigado! ❤️" : "";
+            const index = prev.findIndex(o => o.id === id);
+            const oldOrder: any = index >= 0 ? prev[index] : null;
+            let newList;
+            if (index >= 0) {
+              newList = [...prev];
+              newList[index] = updated;
+            } else {
+              newList = [updated, ...prev];
+            }
+
+            if (!initialLoad && oldOrder && oldOrder.status !== updated.status) {
+              const statusMsg = 
+                updated.status === 'confirmed' ? "Seu pedido foi confirmado pela confeitaria! 🎉" :
+                updated.status === 'preparing' ? "Seus doces já estão sendo preparados com carinho! 🍫" :
+                updated.status === 'ready' ? "Seu pedido está pronto para retirada! 🛍️" :
+                updated.status === 'completed' ? "Seu pedido foi entregue. Obrigado! ❤️" : "";
               if (statusMsg) sendBrowserNotification("S.E Doces Gourmet", statusMsg);
             }
             
@@ -297,7 +345,7 @@ export default function App() {
       if (newStatus === 'deleted') {
         updates.deletedAt = serverTimestamp();
       } else {
-        updates.deletedAt = null; // Clear if restoring
+        updates.deletedAt = null;
       }
       
       await updateDoc(orderRef, updates);
@@ -313,7 +361,6 @@ export default function App() {
   const permanentlyDeleteOrder = async (orderId: string) => {
     if (!window.confirm("Isso excluirá o pedido permanentemente. Continuar?")) return;
     try {
-      // We need to import deleteDoc
       const { deleteDoc, doc: firestoreDoc } = await import('firebase/firestore');
       await deleteDoc(firestoreDoc(db, 'orders', orderId));
       setAdminOrders(prev => prev.filter(o => o.id !== orderId));
@@ -339,96 +386,34 @@ export default function App() {
     localStorage.setItem('docesGourmetCart', JSON.stringify(cart));
   }, [cart]);
 
-  // Fetch Catalog
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const url = `https://docs.google.com/spreadsheets/d/${globalSettings.googleSheetId}/gviz/tq?tqx=out:csv`;
-        const response = await fetch(url);
-        const csvText = await response.text();
-        
-        Papa.parse(csvText, {
-          header: false,
-          skipEmptyLines: true,
-          complete: (results) => {
-            const rows = results.data.slice(1) as string[][];
-            const grouped: Record<string, CategoryGroup> = {};
-            let idCounter = 1;
-
-            rows.forEach((cols) => {
-              // Clean columns (remove quotes and trim)
-              const cleanCols = cols.map(col => col?.replace(/^"|"$/g, '').trim() || "");
-              
-              if (cleanCols.length >= 2 && cleanCols[1] !== "") {
-                const category = cleanCols[0];
-                const name = cleanCols[1];
-                const priceCentoRaw = cleanCols[2]?.replace(',', '.');
-                const unitPriceRaw = cleanCols[3]?.replace(',', '.');
-                
-                const priceCento = priceCentoRaw && priceCentoRaw !== "À Consultar" ? parseFloat(priceCentoRaw) : null;
-                const unitPrice = unitPriceRaw && unitPriceRaw !== "À Consultar" ? parseFloat(unitPriceRaw) : null;
-                
-                // Image Mapping Logic
-                let imageUrl = cleanCols[4] || "";
-                if (!imageUrl || imageUrl === "https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=200&auto=format&fit=crop") {
-                   const matchedKey = Object.keys(PRODUCT_IMAGES).find(key => name.toLowerCase().includes(key.toLowerCase()));
-                   imageUrl = matchedKey ? PRODUCT_IMAGES[matchedKey] : "https://images.unsplash.com/photo-1551024601-bec78aea704b?q=80&w=200&auto=format&fit=crop";
-                }
-
-                const badge = cleanCols[5] || null;
-
-                if (!grouped[category]) {
-                  grouped[category] = { category, items: [] };
-                }
-                
-                grouped[category].items.push({
-                  id: idCounter++,
-                  category,
-                  name,
-                  priceCento,
-                  unitPrice,
-                  imageUrl,
-                  badge
-                });
-              }
-            });
-
-            setCatalog(Object.values(grouped));
-            setLoading(false);
-          },
-          error: (err: any) => {
-            console.error(err);
-            setError("Erro ao carregar o catálogo. Tente novamente.");
-            setLoading(false);
-          }
-        });
-      } catch (err) {
-        console.error(err);
-        setError("Erro de conexão. Verifique sua internet.");
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
-
-  // Memoized Filtered Menu
+  // Filter Products
   const filteredCatalog = useMemo(() => {
     return catalog.map(group => ({
       ...group,
       items: group.items.filter(item => {
         const matchesCategory = currentCategory === 'Todos' || group.category === currentCategory;
-        const matchesSearch = removeAcentos(item.name).includes(removeAcentos(searchTerm));
+        
+        let matchesSearch = true;
+        if (searchTerm.trim()) {
+          const cleanSearch = removeAcentos(searchTerm.toLowerCase());
+          if (cleanSearch === 'mais vendidos' || cleanSearch === 'destaques') {
+            matchesSearch = !!item.badge;
+          } else {
+            matchesSearch = 
+              removeAcentos(item.name.toLowerCase()).includes(cleanSearch) ||
+              removeAcentos(item.category.toLowerCase()).includes(cleanSearch) ||
+              (item.badge ? removeAcentos(item.badge.toLowerCase()).includes(cleanSearch) : false);
+          }
+        }
+        
         return matchesCategory && matchesSearch;
       })
     })).filter(group => group.items.length > 0);
   }, [catalog, currentCategory, searchTerm]);
 
-  // Cart Operations
-  const addToCart = (product: Product) => {
-    const isUnitItem = !!(product.unitPrice && !product.priceCento);
-    const increment = isUnitItem ? 1 : 25;
+  // Cart Operations (Minimum 25 units per item, step by 1)
+  const addToCart = (product: Product, isUnit?: boolean, initialQty?: number) => {
+    const qtyToAdd = initialQty !== undefined ? Math.max(25, initialQty) : 25;
 
     setCart(prev => {
       const existing = prev[product.id];
@@ -437,7 +422,7 @@ export default function App() {
           ...prev,
           [product.id]: {
             ...existing,
-            quantity: existing.quantity + increment
+            quantity: existing.quantity + (initialQty !== undefined ? initialQty : 1)
           }
         };
       }
@@ -445,37 +430,24 @@ export default function App() {
         ...prev,
         [product.id]: {
           ...product,
-          quantity: increment,
-          isUnitItem
+          quantity: qtyToAdd,
+          isUnitItem: isUnit ?? false
         }
       };
     });
-    
-    // Tiny feedback
-    if (!isCartOpen) {
-      // Logic for mobile bounce or toast could go here
-    }
   };
 
   const updateQuantity = (id: number, newQty: number) => {
-    if (newQty <= 0) {
+    if (newQty < 25) {
       removeFromCart(id);
       return;
     }
-
     setCart(prev => {
       const item = prev[id];
       if (!item) return prev;
-
-      // Min quantity for cento items
-      let finalQty = newQty;
-      if (!item.isUnitItem && newQty < 25) {
-        finalQty = 25;
-      }
-
       return {
         ...prev,
-        [id]: { ...item, quantity: finalQty }
+        [id]: { ...item, quantity: newQty }
       };
     });
   };
@@ -485,6 +457,51 @@ export default function App() {
       const newCart = { ...prev };
       delete newCart[id];
       return newCart;
+    });
+  };
+
+  const handleAddMultipleToCart = (items: { product: Product; quantity: number }[]) => {
+    setCart(prev => {
+      const nextCart = { ...prev };
+      items.forEach(({ product, quantity }) => {
+        const existing = nextCart[product.id];
+        if (existing) {
+          nextCart[product.id] = {
+            ...existing,
+            quantity: existing.quantity + quantity
+          };
+        } else {
+          nextCart[product.id] = {
+            ...product,
+            quantity,
+            isUnitItem: false
+          };
+        }
+      });
+      return nextCart;
+    });
+    setIsCartOpen(true);
+  };
+
+  const handleAddCustomItemToCart = (customItem: CartItem) => {
+    setCart(prev => ({
+      ...prev,
+      [customItem.id]: customItem
+    }));
+    setIsCartOpen(true);
+  };
+
+  const handleDownloadCartPdf = () => {
+    const itemsList = Object.values(cart) as CartItem[];
+    if (itemsList.length === 0) return;
+
+    generateOrderPdf({
+      items: itemsList,
+      total: cartTotal,
+      pixKey: globalSettings.pixKey,
+      pickupAddress: globalSettings.pickupAddress,
+      contactPhone: globalSettings.contactPhone,
+      isFormalProposal: true
     });
   };
 
@@ -523,14 +540,138 @@ export default function App() {
         console.error("Admin Reviews Listener error:", err);
       });
 
+      const unsubCustomerNotes = onSnapshot(collection(db, 'customer_notes'), (snap) => {
+        const notesMap: Record<string, CustomerNoteData> = {};
+        snap.docs.forEach(d => {
+          notesMap[d.id] = d.data() as CustomerNoteData;
+        });
+        setCustomerNotes(notesMap);
+      }, (err) => {
+        console.warn("Customer notes notice:", err);
+      });
+
       return () => {
         unsubInv();
         unsubIngredients();
         unsubRecipes();
         unsubReviews();
+        unsubCustomerNotes();
       };
     }
   }, [view, isAdmin]);
+
+  // Global Ready Boxes Listener (Public)
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'ready_boxes'), (snap) => {
+      const boxes = snap.docs.map(d => ({ id: d.id, ...d.data() } as ReadyBox));
+      setReadyBoxes(boxes);
+    }, (err) => {
+      console.warn("Ready boxes notice:", err);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSaveReadyBox = async (boxData: Partial<ReadyBox> & { id?: string }) => {
+    try {
+      const { setDoc, addDoc } = await import('firebase/firestore');
+      if (boxData.id) {
+        const boxId = boxData.id;
+        const { id, ...rest } = boxData;
+        await setDoc(doc(db, 'ready_boxes', boxId), {
+          ...rest,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } else {
+        await addDoc(collection(db, 'ready_boxes'), {
+          ...boxData,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      console.error("Failed to save ready box", err);
+      throw err;
+    }
+  };
+
+  const handleDeleteReadyBox = async (id: string) => {
+    if (!window.confirm("Excluir esta caixinha de pronta entrega?")) return;
+    try {
+      await deleteDoc(doc(db, 'ready_boxes', id));
+    } catch (err) {
+      console.error("Failed to delete ready box", err);
+    }
+  };
+
+  const handleUpdateReadyBoxQuantity = async (id: string, newQuantity: number) => {
+    try {
+      await updateDoc(doc(db, 'ready_boxes', id), {
+        quantityAvailable: newQuantity,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Failed to update quantity", err);
+    }
+  };
+
+  const handleToggleReadyBoxActive = async (id: string, currentActive: boolean) => {
+    try {
+      await updateDoc(doc(db, 'ready_boxes', id), {
+        active: !currentActive,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Failed to toggle ready box", err);
+    }
+  };
+
+  const handleSaveCustomerNotes = async (phoneKey: string, noteData: CustomerNoteData) => {
+    try {
+      const { setDoc } = await import('firebase/firestore');
+      const cleanKey = phoneKey.replace(/\D/g, '') || phoneKey.replace(/\s+/g, '_').toLowerCase();
+      await setDoc(doc(db, 'customer_notes', cleanKey), {
+        ...noteData,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (err) {
+      console.error("Failed to save customer notes", err);
+      throw err;
+    }
+  };
+
+  const handleReadyBoxOrderSubmit = async (orderDetails: OrderDetails, items: any[], total: number) => {
+    try {
+      const docRef = await addDoc(collection(db, 'orders'), {
+        customerName: orderDetails.name,
+        customerPhone: orderDetails.phone || '',
+        date: orderDetails.date,
+        time: orderDetails.time,
+        items,
+        subtotal: total,
+        discountAmount: 0,
+        deliveryFee: 0,
+        deliveryType: 'pickup',
+        deliveryAddress: '',
+        total,
+        paymentMethod: orderDetails.paymentMethod,
+        changeAmount: orderDetails.changeAmount || '',
+        notes: orderDetails.notes || '[PRONTA ENTREGA DE HOJE]',
+        createdAt: serverTimestamp(),
+        status: 'pending',
+        isReadyBoxOrder: true
+      });
+
+      const existingIds = JSON.parse(localStorage.getItem('myOrderIds') || '[]');
+      localStorage.setItem('myOrderIds', JSON.stringify([docRef.id, ...existingIds]));
+      
+      if (globalSettings.enableOrderSoundNotification) {
+        playNewOrderNotification();
+      }
+    } catch (err) {
+      console.error("Failed to save ready box order", err);
+      throw err;
+    }
+  };
 
   const updateProductCost = async (productName: string, costPerUnit: number) => {
     try {
@@ -599,97 +740,79 @@ export default function App() {
 
   const cartTotal = useMemo(() => {
     return (Object.values(cart) as CartItem[]).reduce((acc, item) => {
-      const price = item.unitPrice ? item.unitPrice : (item.priceCento ? item.priceCento / 100 : 0);
+      const price = getProductUnitPrice(item);
       return acc + (price * item.quantity);
     }, 0);
   }, [cart]);
 
-  const cartCount = Object.values(cart).length;
+  const cartCount = useMemo(() => {
+    return Object.keys(cart).length;
+  }, [cart]);
 
-  // Checkout Operations
-  const sendOrder = async () => {
-    if (!orderDetails.name || !orderDetails.date || !orderDetails.time) {
-      alert("Por favor, preencha todos os campos obrigatórios!");
-      return;
-    }
+  const handleOrderCompleted = async (orderDetails: OrderDetails) => {
+    const items = (Object.values(cart) as CartItem[]).map(item => {
+      const price = getProductUnitPrice(item);
+      return {
+        name: item.name,
+        quantity: item.quantity,
+        price,
+        isUnitItem: item.isUnitItem
+      };
+    });
 
-    localStorage.setItem('docesGourmetName', orderDetails.name);
+    const finalCalculatedTotal = orderDetails.finalTotal !== undefined 
+      ? orderDetails.finalTotal 
+      : Math.max(0, cartTotal - (orderDetails.discountAmount || 0) + (orderDetails.deliveryFee || 0));
 
-    const items = (Object.values(cart) as CartItem[]).map(item => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.unitPrice ? item.unitPrice : (item.priceCento ? item.priceCento / 100 : 0)
-    }));
-
-    // Save to Firestore
     try {
       const docRef = await addDoc(collection(db, 'orders'), {
         customerName: orderDetails.name,
         date: orderDetails.date,
         time: orderDetails.time,
         items,
-        total: cartTotal,
+        subtotal: cartTotal,
+        discountAmount: orderDetails.discountAmount || 0,
+        deliveryFee: orderDetails.deliveryFee || 0,
+        deliveryType: orderDetails.deliveryType || 'pickup',
+        deliveryAddress: orderDetails.deliveryAddress || '',
+        total: finalCalculatedTotal,
         paymentMethod: orderDetails.paymentMethod,
-        notes: orderDetails.notes,
+        changeAmount: orderDetails.changeAmount || '',
+        notes: orderDetails.notes || '',
         createdAt: serverTimestamp(),
         status: 'pending'
       });
-
-      // Save ID locally to track later
+      
       const existingIds = JSON.parse(localStorage.getItem('myOrderIds') || '[]');
       localStorage.setItem('myOrderIds', JSON.stringify([docRef.id, ...existingIds]));
     } catch (err) {
-      console.error("Failed to save order to db", err);
-      // We continue anyway since WhatsApp is the main channel
+      console.error("Failed to save order to database", err);
     }
 
-    const hour = new Date().getHours();
-    const greeting = hour >= 5 && hour < 12 ? "Bom dia" : hour >= 12 && hour < 18 ? "Boa tarde" : "Boa noite";
-    
-    const formattedDate = orderDetails.date.split('-').reverse().join('/');
-    
-    let msg = `${greeting}, Eduarda! Aqui é *${orderDetails.name}* e gostaria de fazer o seguinte pedido:\n\n`;
-
-    items.forEach(item => {
-      msg += `• ${item.quantity}x ${item.name} - ${formatCurrency(item.price * item.quantity)}\n`;
-    });
-
-    msg += `\n*🧁 Forminha:* Acetato (Padrão)`;
-    msg += `\n\n*Total do Pedido: ${formatCurrency(cartTotal)}*`;
-    msg += `\n\n*📍 Retirada:* Avenida Padre Jose Stefanello, n°340`;
-    msg += `\n*📅 Data:* ${formattedDate}`;
-    msg += `\n*⏰ Horário:* ${orderDetails.time}`;
-    msg += `\n*💳 Pagamento:* ${orderDetails.paymentMethod}`;
-
-    if (orderDetails.paymentMethod === 'Dinheiro' && orderDetails.changeAmount) {
-      msg += `\n*💵 Troco para:* R$ ${orderDetails.changeAmount}`;
+    // Play chime sound notification immediately
+    if (globalSettings.enableOrderSoundNotification) {
+      playNewOrderNotification();
     }
 
-    if (orderDetails.notes) {
-      msg += `\n\n*📝 Obs:* ${orderDetails.notes}`;
-    }
-
-    confetti({
-      particleCount: 150,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#800020', '#D4AF37', '#ffffff']
+    // Build customizable WhatsApp message
+    const msg = buildWhatsAppMessage({
+      orderDetails,
+      items: Object.values(cart) as CartItem[],
+      cartSubtotal: cartTotal,
+      finalTotal: finalCalculatedTotal,
+      discountAmount: orderDetails.discountAmount || 0,
+      deliveryFee: orderDetails.deliveryFee || 0,
+      pickupAddress: globalSettings.pickupAddress,
+      pixKey: globalSettings.pixKey,
+      template: globalSettings.customWhatsAppTemplate
     });
 
     window.open(`https://wa.me/${globalSettings.contactPhone}?text=${encodeURIComponent(msg)}`, '_blank');
-    
-    // Clear cart and close everything
+
+    // Clear cart and close modals
     setCart({});
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
-  };
-
-  const [copied, setCopied] = useState(false);
-
-  const copyPix = () => {
-    navigator.clipboard.writeText(globalSettings.pixKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) {
@@ -724,45 +847,49 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8">
+    <div className="min-h-screen pb-24 md:pb-8 bg-brand-cream/30 text-neutral-900">
       {/* Header */}
-      <header className="sticky top-0 z-40 glass border-b border-brand-wine/10 shadow-sm">
+      <header className="sticky top-0 z-40 glass border-b border-brand-wine/10 shadow-sm bg-white/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex flex-col">
+          <div 
+            onClick={() => setView('catalog')}
+            className="flex flex-col cursor-pointer select-none"
+          >
             <h1 className="text-lg md:text-2xl font-black text-brand-wine tracking-tighter leading-none">
               S.E DOCES<span className="text-brand-gold">GOURMET</span>
             </h1>
             <p className="text-[10px] md:text-xs text-neutral-500 uppercase tracking-widest font-medium">Catálogo Exclusivo</p>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <button 
               onClick={() => setView('tracking')}
               className={cn(
-                "p-2 rounded-full transition-all flex items-center gap-2 px-3",
-                view === 'tracking' ? "bg-brand-wine text-white" : "text-brand-wine hover:bg-brand-wine/5"
+                "p-2 rounded-full transition-all flex items-center gap-2 px-3 text-xs font-bold",
+                view === 'tracking' ? "bg-brand-wine text-white shadow-sm" : "text-brand-wine hover:bg-brand-wine/5"
               )}
               title="Meus Pedidos"
             >
-              <ShoppingBag className="w-5 h-5" />
-              <span className="text-[10px] font-black hidden md:block">MEUS PEDIDOS</span>
+              <ShoppingBag className="w-4 h-4" />
+              <span className="hidden md:inline">MEUS PEDIDOS</span>
             </button>
 
             {isAdmin && (
               <button 
                 onClick={() => setView(view === 'catalog' ? 'admin' : 'catalog')}
                 className="p-2 text-brand-wine hover:bg-brand-wine/5 rounded-full transition-all"
-                title={view === 'catalog' ? "Ver Histórico" : "Ver Cardápio"}
+                title={view === 'catalog' ? "Painel Administrativo" : "Ver Catálogo"}
               >
                 {view === 'catalog' ? <History className="w-5 h-5" /> : <LayoutGrid className="w-5 h-5" />}
               </button>
             )}
 
             <a 
-              href="https://instagram.com/s.e_docesgourmet" 
+              href={globalSettings.instagramUrl || "https://instagram.com/s.e_docesgourmet"} 
               target="_blank" 
+              rel="noreferrer"
               className="p-2 text-brand-wine hover:text-brand-gold transition-colors"
-              title="Instagram"
+              title="Instagram Oficial"
             >
               <Instagram className="w-5 h-5" />
             </a>
@@ -770,13 +897,14 @@ export default function App() {
             <button 
               onClick={() => setIsCartOpen(true)}
               className="relative p-2 text-brand-wine hover:bg-brand-wine/5 rounded-full transition-all group"
+              title="Ver Carrinho"
             >
               <ShoppingBag className="w-6 h-6" />
               {cartCount > 0 && (
                 <motion.span 
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  className="absolute -top-1 -right-1 bg-brand-gold text-brand-wine text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white"
+                  className="absolute -top-1 -right-1 bg-brand-gold text-brand-wine text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm"
                 >
                   {cartCount}
                 </motion.span>
@@ -787,47 +915,144 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 pt-8">
+      <main className="max-w-7xl mx-auto px-4 pt-6 md:pt-8">
         {view === 'catalog' ? (
           <>
-            {/* Search & Filters */}
-            <section className="mb-12 space-y-6">
-              <div className="relative group max-w-2xl">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400 group-focus-within:text-brand-wine transition-colors" />
-                <input 
-                  type="text" 
-                  placeholder="Qual doçura você procura? (ex: Brigadeiro)"
-                  className="w-full pl-12 pr-4 py-3 bg-white border border-neutral-200 rounded-2xl focus:outline-none focus:border-brand-wine focus:ring-4 focus:ring-brand-wine/5 transition-all text-lg"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            {/* Gourmet Hero Banner */}
+            <HeroBanner 
+              contactPhone={globalSettings.contactPhone}
+              pickupAddress={globalSettings.pickupAddress}
+              businessHours={globalSettings.businessHours}
+              storeStatusText={globalSettings.storeStatusText}
+              storeStatusMode={globalSettings.storeStatusMode}
+              announcementBanner={globalSettings.announcementBanner}
+              onOpenOrder={() => {
+                const el = document.getElementById('catalog-grid');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+
+            {/* Pronta Entrega / Doces de Hoje */}
+            <ReadyBoxesSection 
+              readyBoxes={readyBoxes} 
+              globalSettings={globalSettings} 
+              onSubmitOrder={handleReadyBoxOrderSubmit} 
+            />
+
+            {/* Exclusive Feature Cards: Event Calculator & Mixed Cento */}
+            <section className="mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {/* Event Sweet Calculator Card */}
+              <div 
+                onClick={() => setIsEventCalculatorOpen(true)}
+                className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-brand-wine to-[#68001a] text-white shadow-lg border border-brand-gold/30 hover:scale-[1.02] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between group"
+              >
+                <div className="space-y-1 pr-2">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-brand-gold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> PLANEJADOR DE FESTAS
+                  </span>
+                  <h3 className="font-serif font-bold text-base sm:text-lg italic leading-tight">
+                    Calculadora de Doces p/ Eventos
+                  </h3>
+                  <p className="text-[11px] text-brand-cream/80 leading-tight font-light">
+                    Calcule na proporção de 8 doces por pessoa e monte seu pedido.
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-white/10 border border-brand-gold/30 flex items-center justify-center text-brand-gold shrink-0 group-hover:bg-brand-gold group-hover:text-brand-wine transition-colors">
+                  <Calculator className="w-6 h-6" />
+                </div>
               </div>
 
-              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none -mx-4 px-4">
-                <FilterButton 
-                  active={currentCategory === 'Todos'} 
-                  onClick={() => setCurrentCategory('Todos')}
-                >
-                  Todos
-                </FilterButton>
-                {catalog.map(cat => (
+              {/* Mixed Cento Builder Card */}
+              <div 
+                onClick={() => setIsMixedCentoOpen(true)}
+                className="p-4 sm:p-5 rounded-3xl bg-white border border-brand-wine/15 shadow-sm hover:shadow-md hover:border-brand-wine hover:scale-[1.02] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between group"
+              >
+                <div className="space-y-1 pr-2">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-brand-wine flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-brand-gold" /> CAIXA DE 100 UNIDADES
+                  </span>
+                  <h3 className="font-serif font-bold text-base sm:text-lg italic text-brand-wine leading-tight">
+                    Construtor de Cento Misto
+                  </h3>
+                  <p className="text-[11px] text-neutral-500 leading-tight">
+                    Monte seu Cento escolhendo 4 sabores artesanais (25 un cada).
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-brand-cream border border-brand-wine/10 flex items-center justify-center text-brand-wine shrink-0 group-hover:bg-brand-wine group-hover:text-brand-gold transition-colors">
+                  <Package className="w-6 h-6" />
+                </div>
+              </div>
+
+              {/* Formal PDF Proposal Download Card */}
+              <div 
+                onClick={() => {
+                  if (cartCount === 0) {
+                    alert("Adicione alguns itens ao seu carrinho primeiro para gerar seu orçamento formal em PDF!");
+                    setIsEventCalculatorOpen(true);
+                  } else {
+                    handleDownloadCartPdf();
+                  }
+                }}
+                className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-[#faf7f2] to-[#f4eee6] border border-brand-gold/40 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between group sm:col-span-2 lg:col-span-1"
+              >
+                <div className="space-y-1 pr-2">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-amber-900 flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-brand-gold" /> CASAMENTOS & EMPRESAS
+                  </span>
+                  <h3 className="font-serif font-bold text-base sm:text-lg italic text-brand-wine leading-tight">
+                    Orçamento Formal em PDF
+                  </h3>
+                  <p className="text-[11px] text-neutral-500 leading-tight">
+                    Gere uma proposta detalhada com itens, prazos e condições de reserva.
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-white border border-brand-gold/40 flex items-center justify-center text-brand-wine shrink-0 group-hover:bg-brand-wine group-hover:text-brand-gold transition-colors">
+                  <Download className="w-6 h-6" />
+                </div>
+              </div>
+            </section>
+
+            {/* Quick Search & Filter Chips */}
+            <section className="mb-8 space-y-4">
+              <QuickSearchChips 
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                onSelectChip={(chip) => {
+                  setSearchTerm(chip);
+                  setCurrentCategory('Todos');
+                }}
+              />
+
+              {/* Category Filter Pills */}
+              <div className="sticky top-16 z-30 -mx-4 px-4 py-3 bg-brand-cream/95 backdrop-blur-md border-y border-brand-wine/10">
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none scroll-smooth">
                   <FilterButton 
-                    key={cat.category}
-                    active={currentCategory === cat.category}
-                    onClick={() => setCurrentCategory(cat.category)}
+                    active={currentCategory === 'Todos'} 
+                    onClick={() => setCurrentCategory('Todos')}
                   >
-                    {cat.category}
+                    Todos os Doces
                   </FilterButton>
-                ))}
+                  {catalog.map(cat => (
+                    <FilterButton 
+                      key={cat.category}
+                      active={currentCategory === cat.category}
+                      onClick={() => setCurrentCategory(cat.category)}
+                    >
+                      {cat.category}
+                    </FilterButton>
+                  ))}
+                </div>
               </div>
             </section>
 
             {/* Product Grid */}
-            <div className="space-y-16">
+            <div id="catalog-grid" className="space-y-16">
               {filteredCatalog.map(group => (
                 <section key={group.category}>
-                  <div className="flex items-center gap-4 mb-8">
-                    <h2 className="text-2xl md:text-3xl font-serif text-brand-wine italic">{group.category}</h2>
+                  <div className="flex items-center gap-4 mb-6">
+                    <h2 className="text-2xl md:text-3xl font-serif text-brand-wine italic font-bold">
+                      {group.category}
+                    </h2>
                     <div className="h-px bg-brand-gold/30 flex-grow" />
                   </div>
                   
@@ -836,8 +1061,11 @@ export default function App() {
                       <ProductCard 
                         key={item.id}
                         item={item}
-                        onAdd={() => addToCart(item)}
-                        onViewImage={() => setSelectedImage(item.imageUrl)}
+                        cartItem={cart[item.id]}
+                        onAdd={(isUnit) => addToCart(item, isUnit)}
+                        onUpdateQuantity={(newQty) => updateQuantity(item.id, newQty)}
+                        onRemove={() => removeFromCart(item.id)}
+                        onViewDetails={() => setSelectedProduct(item)}
                         contactPhone={globalSettings.contactPhone}
                       />
                     ))}
@@ -846,8 +1074,19 @@ export default function App() {
               ))}
               
               {filteredCatalog.length === 0 && (
-                <div className="text-center py-20">
-                  <p className="text-neutral-500 font-serif italic text-xl">Nenhuma doçura encontrada para "{searchTerm}"</p>
+                <div className="text-center py-20 bg-white rounded-3xl p-8 border border-neutral-100 shadow-sm max-w-lg mx-auto">
+                  <p className="text-neutral-500 font-serif italic text-lg mb-4">
+                    Nenhuma doçura encontrada para "{searchTerm}"
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSearchTerm('');
+                      setCurrentCategory('Todos');
+                    }}
+                    className="px-6 py-2.5 bg-brand-wine text-brand-gold text-xs font-bold rounded-full shadow-sm hover:bg-brand-wine/90 transition-all"
+                  >
+                    Ver Todos os Doces
+                  </button>
                 </div>
               )}
             </div>
@@ -871,6 +1110,13 @@ export default function App() {
             catalog={catalog}
             globalSettings={globalSettings}
             onUpdateSettings={updateGlobalSettings}
+            readyBoxes={readyBoxes}
+            onSaveReadyBox={handleSaveReadyBox}
+            onDeleteReadyBox={handleDeleteReadyBox}
+            onUpdateReadyBoxQuantity={handleUpdateReadyBoxQuantity}
+            onToggleReadyBoxActive={handleToggleReadyBoxActive}
+            customerNotes={customerNotes}
+            onSaveCustomerNotes={handleSaveCustomerNotes}
           />
         ) : (
           <TrackingView orders={myOrders} onBack={() => setView('catalog')} />
@@ -882,13 +1128,14 @@ export default function App() {
         <div className="max-w-xl mx-auto px-4 space-y-8">
           <div className="space-y-4">
             <h3 className="text-3xl font-serif italic text-brand-gold">Acompanhe nosso trabalho!</h3>
-            <p className="text-brand-cream/70 font-light">Siga a gente no Instagram para ver encomendas reais e novidades diárias.</p>
+            <p className="text-brand-cream/70 font-light">Siga a gente no Instagram para ver encomendas reais, bastidores e novidades diárias.</p>
           </div>
           
           <a 
             href="https://instagram.com/s.e_docesgourmet" 
-            target="_blank"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-brand-gold text-brand-wine font-black rounded-full hover:scale-105 active:scale-95 transition-all shadow-xl shadow-brand-wine/50"
+            target="_blank" 
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-8 py-3.5 bg-brand-gold text-brand-wine font-black rounded-full hover:scale-105 active:scale-95 transition-all shadow-xl shadow-brand-wine/50"
           >
             <Instagram className="w-5 h-5" />
             SEGUIR NO INSTAGRAM
@@ -902,7 +1149,7 @@ export default function App() {
             {!user ? (
               <button 
                 onClick={handleLogin}
-                className="text-[10px] text-white/20 hover:text-brand-gold transition-colors flex items-center gap-1"
+                className="text-[10px] text-white/30 hover:text-brand-gold transition-colors flex items-center gap-1 font-semibold"
               >
                 <LogIn className="w-3 h-3" />
                 ACESSO ADM
@@ -912,7 +1159,7 @@ export default function App() {
                 <span className="text-white/40">{user.email}</span>
                 <button 
                   onClick={handleLogout}
-                  className="text-white/20 hover:text-red-400 transition-colors flex items-center gap-1"
+                  className="text-white/30 hover:text-red-400 transition-colors flex items-center gap-1 font-semibold"
                 >
                   <LogOut className="w-3 h-3" />
                   SAIR
@@ -923,16 +1170,40 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Floating Cart Button (Mobile) */}
-      <div className="fixed bottom-6 right-6 md:hidden z-30">
-        <button 
-          onClick={() => setIsCartOpen(true)}
-          className="flex items-center gap-3 px-6 py-4 bg-brand-wine text-brand-gold font-black rounded-full shadow-2xl animate-float active:scale-90 transition-all border-2 border-brand-gold/20"
-        >
-          <ShoppingBag className="w-6 h-6" />
-          VER PEDIDO ({cartCount})
-        </button>
-      </div>
+      {/* Floating Cart Button / Bottom Bar (Mobile) */}
+      <AnimatePresence>
+        {cartCount > 0 && view === 'catalog' && (
+          <motion.div 
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="fixed bottom-4 left-3 right-3 md:hidden z-30"
+          >
+            <button 
+              onClick={() => setIsCartOpen(true)}
+              className="w-full flex items-center justify-between p-3.5 bg-brand-wine text-white rounded-2xl shadow-2xl border border-brand-gold/40 active:scale-[0.98] transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-xl bg-brand-gold/20 flex items-center justify-center text-brand-gold">
+                  <ShoppingBag className="w-5 h-5" />
+                  <span className="absolute -top-1.5 -right-1.5 bg-brand-gold text-brand-wine text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-brand-wine">
+                    {cartCount}
+                  </span>
+                </div>
+                <div className="text-left">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-brand-gold">Seu Pedido</p>
+                  <p className="text-xs font-black text-white/95">{cartCount} {cartCount === 1 ? 'item adicionado' : 'itens adicionados'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-white/10 px-3.5 py-2 rounded-xl">
+                <span className="text-sm font-black text-brand-gold">{formatCurrency(cartTotal)}</span>
+                <ChevronRight className="w-4 h-4 text-white/80" />
+              </div>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Cart Sidebar */}
       <AnimatePresence>
@@ -955,7 +1226,7 @@ export default function App() {
               <div className="p-6 border-b border-neutral-200 flex items-center justify-between bg-white">
                 <div className="flex items-center gap-3">
                   <ShoppingBag className="w-6 h-6 text-brand-wine" />
-                  <h2 className="text-xl font-serif text-brand-wine">Seu Pedido</h2>
+                  <h2 className="text-xl font-serif text-brand-wine font-bold">Seu Pedido</h2>
                 </div>
                 <button 
                   onClick={() => setIsCartOpen(false)}
@@ -967,11 +1238,10 @@ export default function App() {
 
               <div className="flex-grow overflow-y-auto p-6 space-y-6">
                 {/* Info Alert */}
-                <div className="bg-brand-gold-light/40 border border-brand-gold/20 p-4 rounded-2xl flex gap-3">
+                <div className="bg-brand-gold/10 border border-brand-gold/30 p-4 rounded-2xl flex gap-3">
                   <Info className="w-5 h-5 text-brand-wine shrink-0 mt-0.5" />
                   <div className="text-xs space-y-1 text-brand-wine/80">
-                    <p><strong>Atenção:</strong> Pedido mínimo de 25 unidades por doce.</p>
-                    <p>Encomendas com frutas requerem 4 dias de antecedência.</p>
+                    <p><strong>Atenção:</strong> Pedido de cento mínimo de 25 unidades por doce.</p>
                     <p>Todos os doces acompanham forminha de acetato (padrão).</p>
                   </div>
                 </div>
@@ -983,43 +1253,108 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Minimum order guidance banner */}
+                    <div className="p-3 bg-brand-cream/80 border border-brand-wine/15 rounded-xl text-xs text-brand-wine flex items-center justify-between font-semibold">
+                      <span>📌 Pedido mín. de 25 un por doce</span>
+                      <span className="text-[10px] bg-white/90 px-2 py-0.5 rounded-md border border-brand-wine/20">
+                        Passo de 1 em 1
+                      </span>
+                    </div>
+
                     {(Object.values(cart) as CartItem[]).map(item => {
-                      const price = item.unitPrice ? item.unitPrice : (item.priceCento ? item.priceCento / 100 : 0);
+                      const price = getProductUnitPrice(item);
                       return (
                         <div key={item.id} className="flex gap-4 p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
-                          <img src={item.imageUrl} alt={item.name} className="w-16 h-16 rounded-xl object-cover" />
+                          <img src={item.imageUrl} alt={item.name} className="w-16 h-16 rounded-xl object-cover shrink-0" />
                           <div className="flex-grow min-w-0">
                             <h4 className="font-medium text-sm truncate">{item.name}</h4>
-                            <p className="text-brand-wine font-black text-sm">{formatCurrency(price * item.quantity)}</p>
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-brand-wine font-black text-sm">{formatCurrency(price * item.quantity)}</p>
+                              <span className="text-[11px] text-neutral-400">({formatCurrency(item.priceCento || price * 100)} / cento)</span>
+                            </div>
                             
-                            <div className="flex items-center justify-between mt-3">
-                              <div className="flex items-center gap-1 border border-neutral-200 rounded-lg p-1 bg-neutral-50">
-                                <button 
-                                  onClick={() => {
-                                    if (item.quantity <= (item.isUnitItem ? 1 : 25)) {
-                                      removeFromCart(item.id);
-                                    } else {
-                                      updateQuantity(item.id, item.quantity - (item.isUnitItem ? 1 : 5));
-                                    }
-                                  }}
-                                  className="p-1 hover:bg-white rounded transition-colors text-neutral-500"
+                            <div className="flex flex-col gap-2 mt-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1 border border-neutral-200 rounded-lg p-1 bg-neutral-50">
+                                  <button 
+                                    onClick={() => {
+                                      if (item.quantity <= 25) {
+                                        removeFromCart(item.id);
+                                      } else {
+                                        updateQuantity(item.id, item.quantity - 1);
+                                      }
+                                    }}
+                                    className="p-1.5 hover:bg-white rounded transition-colors text-neutral-500 active:scale-90"
+                                    title={item.quantity <= 25 ? "Remover do pedido" : "Diminuir 1 unidade"}
+                                  >
+                                    {item.quantity <= 25 ? <Trash2 className="w-3.5 h-3.5 text-red-500" /> : <Minus className="w-3.5 h-3.5" />}
+                                  </button>
+                                  <input 
+                                    type="number" 
+                                    min={25}
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value);
+                                      if (!isNaN(val)) {
+                                        if (val < 25) {
+                                          updateQuantity(item.id, Math.max(0, val));
+                                        } else {
+                                          updateQuantity(item.id, val);
+                                        }
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      if (item.quantity < 25) {
+                                        updateQuantity(item.id, 25);
+                                      }
+                                    }}
+                                    className="w-14 text-center text-xs font-black text-brand-wine bg-white border border-neutral-200 rounded px-1 py-0.5 outline-none"
+                                    title="Digite a quantidade"
+                                  />
+                                  <button 
+                                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                    className="p-1.5 hover:bg-white rounded transition-colors text-neutral-500 active:scale-90"
+                                    title="Adicionar 1 unidade"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                <span className="text-xs text-brand-wine font-black">{item.quantity} un</span>
+                              </div>
+
+                              {/* Quick shortcuts in cart */}
+                              <div className="flex items-center gap-1.5 text-[10px]">
+                                <button
+                                  type="button"
+                                  onClick={() => updateQuantity(item.id, 25)}
+                                  className={cn(
+                                    "px-2 py-0.5 rounded border font-semibold transition-all",
+                                    item.quantity === 25 ? "bg-brand-wine text-white border-brand-wine" : "bg-neutral-50 text-neutral-600 hover:bg-neutral-100"
+                                  )}
                                 >
-                                  {item.quantity <= (item.isUnitItem ? 1 : 25) ? <Trash2 className="w-3.5 h-3.5 text-red-500" /> : <Minus className="w-3.5 h-3.5" />}
+                                  25 un
                                 </button>
-                                <input 
-                                  type="number" 
-                                  value={item.quantity}
-                                  onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 0)}
-                                  className="w-10 text-center text-xs font-bold bg-transparent outline-none"
-                                />
-                                <button 
-                                  onClick={() => updateQuantity(item.id, item.quantity + (item.isUnitItem ? 1 : 5))}
-                                  className="p-1 hover:bg-white rounded transition-colors text-neutral-500"
+                                <button
+                                  type="button"
+                                  onClick={() => updateQuantity(item.id, 50)}
+                                  className={cn(
+                                    "px-2 py-0.5 rounded border font-semibold transition-all",
+                                    item.quantity === 50 ? "bg-brand-wine text-white border-brand-wine" : "bg-neutral-50 text-neutral-600 hover:bg-neutral-100"
+                                  )}
                                 >
-                                  <Plus className="w-3.5 h-3.5" />
+                                  50 un
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateQuantity(item.id, 100)}
+                                  className={cn(
+                                    "px-2 py-0.5 rounded border font-bold transition-all",
+                                    item.quantity === 100 ? "bg-brand-wine text-brand-gold border-brand-wine" : "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
+                                  )}
+                                >
+                                  1 Cento
                                 </button>
                               </div>
-                              <span className="text-[10px] text-neutral-400 font-medium">Qtd: {item.quantity}</span>
                             </div>
                           </div>
                         </div>
@@ -1030,14 +1365,26 @@ export default function App() {
               </div>
 
               {cartCount > 0 && (
-                <div className="p-6 bg-white border-t border-neutral-200 space-y-4">
+                <div className="p-6 bg-white border-t border-neutral-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-neutral-500 font-medium tracking-wider text-xs uppercase">Subtotal</span>
                     <span className="text-2xl font-black text-brand-wine">{formatCurrency(cartTotal)}</span>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadCartPdf}
+                    className="w-full py-2.5 bg-neutral-100 text-brand-wine hover:bg-neutral-200 font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-xs border border-neutral-200 shadow-sm"
+                  >
+                    <Download className="w-4 h-4 text-brand-wine" />
+                    BAIXAR ORÇAMENTO EM PDF
+                  </button>
                   
                   <button 
-                    onClick={() => setIsCheckoutOpen(true)}
+                    onClick={() => {
+                      setIsCartOpen(false);
+                      setIsCheckoutOpen(true);
+                    }}
                     className="w-full py-4 bg-brand-wine text-brand-gold font-black rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group shadow-xl shadow-brand-wine/20"
                   >
                     CONTINUAR PARA ENTREGA
@@ -1050,179 +1397,84 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Checkout Modal */}
+      {/* Product Details & Lightbox Modal */}
       <AnimatePresence>
-        {isCheckoutOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsCheckoutOpen(false)}
-              className="absolute inset-0 bg-neutral-900/80 backdrop-blur-md"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              <div className="p-8 pb-4 flex items-center justify-between">
-                <div className="space-y-1">
-                  <h2 className="text-3xl font-serif text-brand-wine italic">Quase Pronto!</h2>
-                  <p className="text-neutral-500 text-sm">Preencha os detalhes para agendarmos sua retirada.</p>
-                </div>
-                <button onClick={() => setIsCheckoutOpen(false)} className="p-2 hover:bg-neutral-100 rounded-full transition-colors shrink-0">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="flex-grow overflow-y-auto p-8 pt-4 space-y-8">
-                {/* Pickup Address */}
-                <div className="p-4 bg-brand-cream border-l-4 border-brand-wine rounded-r-2xl space-y-1">
-                  <div className="flex items-center gap-2 text-brand-wine font-bold text-sm">
-                    <Calendar className="w-4 h-4" />
-                    📍 LOCAL DE RETIRADA
-                  </div>
-                  <p className="text-neutral-600 text-sm">Avenida Padre Jose Stefanello, n°340</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField label="Seu Nome" icon={<User className="w-4 h-4" />}>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: Maria Silva"
-                      className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine focus:ring-1 focus:ring-brand-wine/20 outline-none transition-all"
-                      value={orderDetails.name}
-                      onChange={(e) => setOrderDetails(prev => ({ ...prev, name: e.target.value }))}
-                    />
-                  </FormField>
-
-                  <FormField label="Data da Retirada" icon={<Calendar className="w-4 h-4" />}>
-                    <input 
-                      type="date"
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
-                      value={orderDetails.date}
-                      onChange={(e) => setOrderDetails(prev => ({ ...prev, date: e.target.value }))}
-                    />
-                  </FormField>
-
-                  <FormField label="Horário" icon={<Clock className="w-4 h-4" />}>
-                    <input 
-                      type="time" 
-                      className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
-                      value={orderDetails.time}
-                      onChange={(e) => setOrderDetails(prev => ({ ...prev, time: e.target.value }))}
-                    />
-                  </FormField>
-
-                  <FormField label="Pagamento" icon={<CreditCard className="w-4 h-4" />}>
-                    <select 
-                      className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all appearance-none"
-                      value={orderDetails.paymentMethod}
-                      onChange={(e) => setOrderDetails(prev => ({ ...prev, paymentMethod: e.target.value as any }))}
-                    >
-                      <option value="Pix">PIX</option>
-                      <option value="Dinheiro">Dinheiro</option>
-                    </select>
-                  </FormField>
-                </div>
-
-                {orderDetails.paymentMethod === 'Pix' && (
-                  <div className="p-6 bg-blue-50 border border-blue-100 rounded-[24px] text-center space-y-4">
-                    <div className="space-y-1">
-                      <p className="text-blue-900/60 text-[10px] uppercase font-black tracking-widest">Chave PIX (CPF)</p>
-                      <p className="text-xl font-black text-blue-900">039.722.899-60</p>
-                    </div>
-                    <button 
-                      onClick={copyPix}
-                      className={cn(
-                        "inline-flex items-center gap-2 px-6 py-2 rounded-full text-xs font-bold transition-all",
-                        copied ? "bg-emerald-500 text-white" : "bg-blue-600 text-white hover:bg-blue-700"
-                      )}
-                    >
-                      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copied ? "COPIADO!" : "COPIAR CHAVE"}
-                    </button>
-                  </div>
-                )}
-
-                {orderDetails.paymentMethod === 'Dinheiro' && (
-                  <FormField label="Troco para quanto?" icon={<DollarSign className="w-4 h-4" />}>
-                    <input 
-                      type="text" 
-                      placeholder="Ex: 50, 100 (Ou deixe em branco)"
-                      className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
-                      value={orderDetails.changeAmount}
-                      onChange={(e) => setOrderDetails(prev => ({ ...prev, changeAmount: e.target.value }))}
-                    />
-                  </FormField>
-                )}
-
-                <FormField label="Observações Adicionais" icon={<Info className="w-4 h-4" />}>
-                  <textarea 
-                    rows={3}
-                    placeholder="Ex: Sem granulado, embalagem de presente, etc..."
-                    className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all resize-none"
-                    value={orderDetails.notes}
-                    onChange={(e) => setOrderDetails(prev => ({ ...prev, notes: e.target.value }))}
-                  />
-                </FormField>
-              </div>
-
-              <div className="p-8 pt-4 bg-neutral-50 border-t border-neutral-100">
-                <button 
-                  onClick={sendOrder}
-                  className="w-full py-5 bg-brand-wine text-brand-gold font-black rounded-2xl flex items-center justify-center gap-3 shadow-2xl shadow-brand-wine/30 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                >
-                  <MessageCircle className="w-6 h-6" />
-                  ENVIAR PEDIDO VIA WHATSAPP
-                </button>
-              </div>
-            </motion.div>
-          </div>
+        {selectedProduct && (
+          <ProductDetailsModal
+            product={selectedProduct}
+            cartItem={cart[selectedProduct.id]}
+            onClose={() => setSelectedProduct(null)}
+            onAddToCart={(prod, isUnit, qty) => addToCart(prod, isUnit, qty)}
+            onUpdateQuantity={(id, qty) => updateQuantity(id, qty)}
+            onRemoveFromCart={(id) => removeFromCart(id)}
+            contactPhone={globalSettings.contactPhone}
+          />
         )}
       </AnimatePresence>
 
-      {/* Image Lightbox */}
+      {/* Event Sweet Calculator Modal */}
       <AnimatePresence>
-        {selectedImage && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setSelectedImage(null)}
-            className="fixed inset-0 z-[300] bg-neutral-950/95 flex items-center justify-center p-4"
-          >
-            <motion.img 
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              src={selectedImage} 
-              alt="Preview" 
-              className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl border-2 border-brand-gold/50"
-            />
-            <button className="absolute top-6 right-6 p-3 bg-white/10 text-white rounded-full hover:bg-white/20 transition-all">
-              <X className="w-6 h-6" />
-            </button>
-          </motion.div>
+        {isEventCalculatorOpen && (
+          <EventSweetCalculatorModal
+            isOpen={isEventCalculatorOpen}
+            onClose={() => setIsEventCalculatorOpen(false)}
+            catalog={catalog}
+            onAddMultipleToCart={handleAddMultipleToCart}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Mixed Cento Builder Modal */}
+      <AnimatePresence>
+        {isMixedCentoOpen && (
+          <MixedCentoModal
+            isOpen={isMixedCentoOpen}
+            onClose={() => setIsMixedCentoOpen(false)}
+            catalog={catalog}
+            onAddCustomCentoToCart={handleAddCustomItemToCart}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Checkout Modal */}
+      <AnimatePresence>
+        {isCheckoutOpen && (
+          <CheckoutModal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            cart={cart}
+            cartTotal={cartTotal}
+            contactPhone={globalSettings.contactPhone}
+            pixKey={globalSettings.pixKey}
+            pickupAddress={globalSettings.pickupAddress}
+            minNoticeHours={globalSettings.minNoticeHours || 48}
+            blockedDates={globalSettings.blockedDates || []}
+            deliveryMode={globalSettings.deliveryMode}
+            deliveryFeeType={globalSettings.deliveryFeeType}
+            deliveryFixedFee={globalSettings.deliveryFixedFee}
+            freeDeliveryThreshold={globalSettings.freeDeliveryThreshold}
+            enableVolumeDiscount={globalSettings.enableVolumeDiscount}
+            volumeDiscountMinItems={globalSettings.volumeDiscountMinItems}
+            volumeDiscountPercent={globalSettings.volumeDiscountPercent}
+            volumeDiscountMessage={globalSettings.volumeDiscountMessage}
+            customWhatsAppTemplate={globalSettings.customWhatsAppTemplate}
+            onOrderCompleted={handleOrderCompleted}
+          />
         )}
       </AnimatePresence>
     </div>
   );
 }
 
-// Subcomponents
 const FilterButton: React.FC<{ children: React.ReactNode, active: boolean, onClick: () => void }> = ({ children, active, onClick }) => {
   return (
     <button 
       onClick={onClick}
       className={cn(
-        "px-6 py-2 rounded-full whitespace-nowrap font-medium transition-all text-sm border",
+        "px-4 sm:px-6 py-2 rounded-full whitespace-nowrap font-bold transition-all text-xs sm:text-sm border shrink-0 active:scale-95",
         active 
-          ? "bg-brand-wine text-brand-gold border-brand-wine shadow-lg shadow-brand-wine/20 scale-105" 
-          : "bg-white text-neutral-500 border-neutral-200 hover:border-brand-wine/30 hover:bg-brand-wine/5"
+          ? "bg-brand-wine text-brand-gold border-brand-wine shadow-md shadow-brand-wine/25 scale-[1.02]" 
+          : "bg-white text-neutral-600 border-neutral-200 hover:border-brand-wine/30 hover:bg-brand-wine/5"
       )}
     >
       {children}
@@ -1230,227 +1482,11 @@ const FilterButton: React.FC<{ children: React.ReactNode, active: boolean, onCli
   );
 };
 
-const ProductCard: React.FC<{ item: Product, onAdd: () => void, onViewImage: () => void, contactPhone: string }> = ({ item, onAdd, onViewImage, contactPhone }) => {
-  const [showReviews, setShowReviews] = useState(false);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [pReviews, setPReviews] = useState<any[]>([]);
-
-  // Load reviews for this product
-  useEffect(() => {
-    if (showReviews) {
-      const q = query(
-        collection(db, 'reviews'), 
-        where('status', '==', 'approved'),
-        orderBy('createdAt', 'desc')
-      );
-      return onSnapshot(q, (snap) => {
-        setPReviews(snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter((r: any) => r.productName === item.name)
-        );
-      }, (err) => {
-        console.error("Error loading reviews for product:", err);
-      });
-    }
-  }, [showReviews, item.name]);
-
-  const handleSubmitReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!auth.currentUser) {
-      alert("Você precisa estar logado para avaliar!");
-      return;
-    }
-    if (!comment.trim()) return;
-
-    setSubmitting(true);
-    try {
-      await addDoc(collection(db, 'reviews'), {
-        productName: item.name,
-        userName: auth.currentUser.displayName || 'Cliente',
-        userEmail: auth.currentUser.email,
-        rating,
-        comment,
-        status: 'pending',
-        createdAt: serverTimestamp()
-      });
-      setComment('');
-      alert("Sua avaliação foi enviada e está aguardando moderação. Obrigado!");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const isConsult = item.priceCento === null && item.unitPrice === null;
-  const priceText = isConsult 
-    ? 'À Consultar' 
-    : (item.unitPrice && !item.priceCento 
-        ? `${formatCurrency(item.unitPrice)} / Unidade` 
-        : `${formatCurrency(item.priceCento || 0)} / Cento`);
-
-  const avgRating = pReviews.length > 0 
-    ? pReviews.reduce((sum, r) => sum + r.rating, 0) / pReviews.length 
-    : 5;
-
+export function FormField({ label, children, icon }: { label: string, children: React.ReactNode, icon?: React.ReactNode }) {
   return (
-    <>
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="group relative bg-white rounded-3xl overflow-hidden border border-neutral-100 shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-2 flex flex-col"
-      >
-        {item.badge && (
-          <div className="absolute top-6 left-[-70px] z-20 w-[240px] bg-red-600 text-white text-[10px] font-black py-1.5 text-center shadow-lg shadow-red-600/30 uppercase tracking-wider transform -rotate-45 pointer-events-none border-y border-white/20">
-            <span className="block w-full text-center drop-shadow-sm">{item.badge}</span>
-          </div>
-        )}
-        
-        <div className="relative aspect-square overflow-hidden bg-neutral-100 group-hover:scale-110 transition-transform duration-700">
-          <img 
-            src={item.imageUrl} 
-            alt={item.name} 
-            className="w-full h-full object-cover cursor-zoom-in"
-            onClick={onViewImage}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-          
-          <button 
-            onClick={() => setShowReviews(true)}
-            className="absolute bottom-4 right-4 bg-white/90 backdrop-blur px-2 py-1 rounded-lg shadow-sm flex items-center gap-1 text-xs font-black text-brand-wine hover:bg-white transition-colors"
-          >
-            <Star className="w-3 h-3 fill-brand-gold text-brand-gold" />
-            {avgRating.toFixed(1)}
-          </button>
-        </div>
-
-        <div className="p-6 flex flex-col flex-grow">
-          <h3 className="font-serif text-lg leading-tight mb-2 group-hover:text-brand-wine transition-colors">{item.name}</h3>
-          <p className="text-brand-wine font-black text-sm mb-6 flex-grow">{priceText}</p>
-
-          {isConsult ? (
-            <button 
-              onClick={() => window.open(`https://wa.me/${contactPhone}?text=Olá! Gostaria de consultar o valor do doce: ${item.name}`, '_blank')}
-              className="w-full py-3 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 active:scale-95 transition-all text-xs flex items-center justify-center gap-2"
-            >
-              <MessageCircle className="w-4 h-4" />
-              CONSULTAR VALOR
-            </button>
-          ) : (
-            <button 
-              onClick={onAdd}
-              className="w-full py-3 bg-brand-wine text-brand-gold font-black rounded-xl hover:bg-brand-wine/90 active:scale-95 transition-all text-xs flex items-center justify-center gap-2 group-hover:gold-gradient group-hover:text-brand-wine"
-            >
-              <Plus className="w-4 h-4" />
-              ADICIONAR AO PEDIDO
-            </button>
-          )}
-        </div>
-      </motion.div>
-
-      <AnimatePresence>
-        {showReviews && (
-          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowReviews(false)}
-              className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-lg bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-            >
-              <div className="p-8 pb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="font-serif text-2xl italic text-brand-wine">{item.name}</h3>
-                  <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest tracking-widest mt-1">Avaliações dos Clientes</p>
-                </div>
-                <button onClick={() => setShowReviews(false)} className="p-2 hover:bg-neutral-100 rounded-full">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="flex-grow overflow-y-auto p-8 pt-4 space-y-8">
-                {/* Review Form */}
-                <div className="p-6 bg-brand-cream/50 rounded-3xl border border-brand-wine/5">
-                  <h4 className="text-[10px] font-black text-brand-wine uppercase tracking-widest mb-4">Deixe seu feedback</h4>
-                  <form onSubmit={handleSubmitReview} className="space-y-4">
-                    <div className="flex gap-2">
-                      {[1, 2, 3, 4, 5].map(v => (
-                        <button 
-                          key={v}
-                          type="button"
-                          onClick={() => setRating(v)}
-                          className={cn("p-1 transition-transform active:scale-90", rating >= v ? "text-brand-gold" : "text-neutral-200")}
-                        >
-                          <Star className={cn("w-6 h-6", rating >= v && "fill-current")} />
-                        </button>
-                      ))}
-                    </div>
-                    <textarea 
-                      placeholder="O que achou deste doce?"
-                      className="w-full p-4 text-sm bg-white border border-brand-wine/10 rounded-2xl focus:border-brand-wine outline-none resize-none h-24"
-                      value={comment}
-                      onChange={(e) => setComment(e.target.value)}
-                    />
-                    <button 
-                      type="submit"
-                      disabled={submitting}
-                      className="w-full py-3 bg-brand-wine text-white text-xs font-black rounded-xl hover:scale-105 transition-all shadow-lg shadow-brand-wine/20 disabled:opacity-50"
-                    >
-                      {submitting ? "ENVIANDO..." : "PUBLICAR AVALIAÇÃO"}
-                    </button>
-                  </form>
-                </div>
-
-                {/* List */}
-                <div className="space-y-6">
-                  {pReviews.length === 0 ? (
-                    <div className="text-center py-10 text-neutral-400 italic font-serif">Seja o primeiro a avaliar este item!</div>
-                  ) : (
-                    pReviews.map((r: any) => (
-                      <div key={r.id} className="space-y-2 animate-in fade-in slide-in-from-bottom-2">
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                          <span className="text-brand-wine">{r.userName}</span>
-                          <span className="text-neutral-300">
-                             {r.createdAt instanceof Timestamp ? r.createdAt.toDate().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Hoje'}
-                          </span>
-                        </div>
-                        <div className="flex gap-0.5 text-brand-gold">
-                           {[...Array(5)].map((_, i) => (
-                             <Star key={i} className={cn("w-2.5 h-2.5 fill-current", i >= r.rating && "opacity-20")} />
-                           ))}
-                        </div>
-                        <p className="text-sm text-neutral-600 font-serif leading-relaxed italic">"{r.comment}"</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </>
-  );
-}
-
-const ProductCardLegacy = ({ item, onAdd, onViewImage }: { item: Product, onAdd: () => void, onViewImage: () => void }) => {
-  return null; // This is just to replace the old one correctly
-};
-
-function FormField({ label, children, icon }: { label: string, children: React.ReactNode, icon: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-1">
-        <span className="text-brand-wine">{icon}</span>
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+        {icon && <span className="text-brand-wine">{icon}</span>}
         {label}
       </label>
       {children}
@@ -1611,7 +1647,14 @@ function AdminView({
   onDeleteReview,
   catalog,
   globalSettings,
-  onUpdateSettings
+  onUpdateSettings,
+  readyBoxes = [],
+  onSaveReadyBox,
+  onDeleteReadyBox,
+  onUpdateReadyBoxQuantity,
+  onToggleReadyBoxActive,
+  customerNotes = {},
+  onSaveCustomerNotes
 }: { 
   orders: any[], 
   loading: boolean, 
@@ -1629,10 +1672,17 @@ function AdminView({
   onDeleteReview: (id: string) => void,
   catalog: any[],
   globalSettings: any,
-  onUpdateSettings: (data: any) => void
+  onUpdateSettings: (data: any) => void,
+  readyBoxes?: ReadyBox[],
+  onSaveReadyBox?: (box: Partial<ReadyBox> & { id?: string }) => Promise<void>,
+  onDeleteReadyBox?: (id: string) => Promise<void>,
+  onUpdateReadyBoxQuantity?: (id: string, qty: number) => Promise<void>,
+  onToggleReadyBoxActive?: (id: string, active: boolean) => Promise<void>,
+  customerNotes?: Record<string, CustomerNoteData>,
+  onSaveCustomerNotes?: (phoneKey: string, noteData: CustomerNoteData) => Promise<void>
 }) {
   const [periodFilter, setPeriodFilter] = useState<'all' | 'week' | 'month' | 'year' | 'trash'>('all');
-  const [activeTab, setActiveTab] = useState<'orders' | 'inventory' | 'reviews' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'production' | 'ready_boxes' | 'calculator' | 'crm' | 'inventory' | 'quick_replies' | 'reviews' | 'settings'>('orders');
 
   const filteredOrders = useMemo(() => {
     const now = new Date();
@@ -1676,6 +1726,24 @@ function AdminView({
     return { totalRevenue, netRevenue, count, totalCost };
   }, [orders, productCosts, ingredients, recipes]);
 
+  // Today's active production count
+  const todayProductionCount = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return orders.filter(o => o.status !== 'deleted' && o.status !== 'delivered' && o.date === todayStr).length;
+  }, [orders]);
+
+  const activeReadyBoxesCount = useMemo(() => {
+    return readyBoxes.filter(b => b.active && b.quantityAvailable > 0).length;
+  }, [readyBoxes]);
+
+  const uniqueCustomersCount = useMemo(() => {
+    const phoneSet = new Set<string>();
+    orders.forEach(o => {
+      if (o.customerPhone) phoneSet.add(o.customerPhone.replace(/\D/g, ''));
+    });
+    return phoneSet.size;
+  }, [orders]);
+
   if (loading) {
     return (
       <div className="py-20 text-center">
@@ -1686,82 +1754,216 @@ function AdminView({
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="space-y-1">
-          <h2 className="text-3xl font-serif text-brand-wine italic">Área Administrativa</h2>
-          <p className="text-neutral-500 text-sm">Gere o seu negócio com precisão.</p>
+          <h2 className="text-3xl font-serif text-brand-wine italic font-bold">Área Administrativa</h2>
+          <p className="text-neutral-500 text-sm">Gerencie pedidos, produção, pronta entrega, lucratividade e clientes.</p>
         </div>
         
-        <div className="flex p-1 bg-neutral-100 rounded-2xl">
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap p-1.5 bg-neutral-100 rounded-2xl gap-1">
           <button 
+            type="button"
             onClick={() => setActiveTab('orders')}
             className={cn(
-              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
               activeTab === 'orders' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
             )}
           >
-            Pedidos
+            <Package className="w-3.5 h-3.5" />
+            Pedidos ({orders.filter(o => o.status !== 'deleted').length})
           </button>
+
           <button 
+            type="button"
+            onClick={() => setActiveTab('production')}
+            className={cn(
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              activeTab === 'production' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
+            )}
+          >
+            <ChefHat className="w-3.5 h-3.5 text-brand-gold" />
+            Produção
+            {todayProductionCount > 0 && (
+              <span className="px-1.5 py-0.5 bg-brand-gold text-brand-wine font-black text-[9px] rounded-full animate-pulse">
+                {todayProductionCount}
+              </span>
+            )}
+          </button>
+
+          {/* Feature 4: Pronta Entrega / Doces de Hoje */}
+          <button 
+            type="button"
+            onClick={() => setActiveTab('ready_boxes')}
+            className={cn(
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              activeTab === 'ready_boxes' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
+            )}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            Doces de Hoje
+            {activeReadyBoxesCount > 0 && (
+              <span className="px-1.5 py-0.5 bg-emerald-500 text-white font-black text-[9px] rounded-full">
+                {activeReadyBoxesCount}
+              </span>
+            )}
+          </button>
+
+          {/* Feature 2: Calculadora Reversa de Lucro & Panela */}
+          <button 
+            type="button"
+            onClick={() => setActiveTab('calculator')}
+            className={cn(
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              activeTab === 'calculator' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
+            )}
+          >
+            <Calculator className="w-3.5 h-3.5 text-brand-gold" />
+            Calc. Lucro Real
+          </button>
+
+          {/* Feature 5: CRM do Cliente & Histórico */}
+          <button 
+            type="button"
+            onClick={() => setActiveTab('crm')}
+            className={cn(
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              activeTab === 'crm' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
+            )}
+          >
+            <Users className="w-3.5 h-3.5 text-blue-500" />
+            CRM Clientes
+            {uniqueCustomersCount > 0 && (
+              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 font-black text-[9px] rounded-full">
+                {uniqueCustomersCount}
+              </span>
+            )}
+          </button>
+
+          <button 
+            type="button"
             onClick={() => setActiveTab('inventory')}
             className={cn(
-              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
               activeTab === 'inventory' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
             )}
           >
-            Estoque/Custos
+            <DollarSign className="w-3.5 h-3.5" />
+            Estoque
           </button>
+
+          {/* Feature 1: Respostas Rápidas de WhatsApp */}
           <button 
+            type="button"
+            onClick={() => setActiveTab('quick_replies')}
+            className={cn(
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              activeTab === 'quick_replies' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
+            )}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+            WhatsApp
+          </button>
+
+          <button 
+            type="button"
             onClick={() => setActiveTab('reviews')}
             className={cn(
-              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
               activeTab === 'reviews' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
             )}
           >
+            <Star className="w-3.5 h-3.5" />
             Avaliações
             {reviews.filter(r => r.status === 'pending').length > 0 && (
-              <span className="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-[8px] rounded-full">
+              <span className="px-1.5 py-0.5 bg-red-500 text-white font-black text-[8px] rounded-full">
                 {reviews.filter(r => r.status === 'pending').length}
               </span>
             )}
           </button>
+
           <button 
+            type="button"
             onClick={() => setActiveTab('settings')}
             className={cn(
-              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
               activeTab === 'settings' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
             )}
           >
+            <Settings className="w-3.5 h-3.5" />
             Configurações
           </button>
         </div>
       </div>
 
       {activeTab === 'orders' && (
-        <div className="space-y-8">
-          <div className="flex flex-wrap gap-2 justify-end">
-            {(['all', 'week', 'month', 'year', 'trash'] as const).map((p) => (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+          {/* Action Bar: Period Filters + Export Buttons (Item 4) */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-neutral-100 shadow-sm">
+            {/* Period Filters */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase text-neutral-400 mr-1">Período:</span>
+              {(['all', 'week', 'month', 'year', 'trash'] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPeriodFilter(p)}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-1.5",
+                    periodFilter === p 
+                      ? "bg-brand-gold text-brand-wine border-brand-gold shadow-sm font-black" 
+                      : (p === 'trash' ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-neutral-50 text-neutral-500 border-neutral-200 hover:bg-neutral-100")
+                  )}
+                >
+                  {p === 'trash' && <Trash2 className="w-3 h-3" />}
+                  {p === 'all' ? 'Tudo' : p === 'week' ? 'Semana' : p === 'month' ? 'Mês' : p === 'year' ? 'Ano' : 'Lixeira'}
+                </button>
+              ))}
+            </div>
+
+            {/* Item 4: Export Buttons (Excel .csv & Professional PDF) */}
+            <div className="flex items-center gap-2">
               <button
-                key={p}
-                onClick={() => setPeriodFilter(p)}
-                className={cn(
-                  "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-2",
-                  periodFilter === p 
-                    ? "bg-brand-gold text-brand-wine border-brand-gold" 
-                    : (p === 'trash' ? "bg-red-50 text-red-500 border-red-100" : "bg-white text-neutral-400 border-neutral-200")
-                )}
+                type="button"
+                onClick={() => exportSalesToCsv({
+                  orders: filteredOrders,
+                  productCosts,
+                  ingredients,
+                  recipes,
+                  periodName: periodFilter === 'all' ? 'Geral Completo' : periodFilter === 'week' ? 'Última Semana' : periodFilter === 'month' ? 'Mês Atual' : periodFilter === 'year' ? 'Ano Atual' : 'Lixeira',
+                  globalSettings
+                })}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all"
+                title="Exportar planilha compatível com Excel e Google Sheets"
               >
-                {p === 'trash' && <Trash2 className="w-3 h-3" />}
-                {p === 'all' ? 'Tudo' : p === 'week' ? 'Semana' : p === 'month' ? 'Mês' : p === 'year' ? 'Ano' : 'Lixeira'}
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Exportar Excel (.csv)
               </button>
-            ))}
+
+              <button
+                type="button"
+                onClick={() => exportSalesToPdf({
+                  orders: filteredOrders,
+                  productCosts,
+                  ingredients,
+                  recipes,
+                  periodName: periodFilter === 'all' ? 'Geral Completo' : periodFilter === 'week' ? 'Última Semana' : periodFilter === 'month' ? 'Mês Atual' : periodFilter === 'year' ? 'Ano Atual' : 'Lixeira',
+                  globalSettings
+                })}
+                className="px-3.5 py-2 bg-brand-wine hover:bg-black text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all"
+                title="Gerar Relatório Executivo e Financeiro em PDF"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Exportar PDF (Relatório)
+              </button>
+            </div>
           </div>
 
           {periodFilter !== 'trash' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <StatCard label="Bruto" value={formatCurrency(stats.totalRevenue)} color="neutral" />
-              <StatCard label="Líquido (Lucro)" value={formatCurrency(stats.netRevenue)} color="wine" />
-              <StatCard label="Volume" value={`${stats.count} ped.`} color="gold" />
+              <StatCard label="Faturamento Bruto" value={formatCurrency(stats.totalRevenue)} color="neutral" />
+              <StatCard label="Lucro Líquido Real" value={formatCurrency(stats.netRevenue)} color="wine" />
+              <StatCard label="Pedidos Concluídos" value={`${stats.count} pedidos`} color="gold" />
             </div>
           )}
 
@@ -1769,14 +1971,16 @@ function AdminView({
 
           <div className="grid grid-cols-1 gap-6">
             {filteredOrders.length === 0 ? (
-              <div className="py-20 text-center border-2 border-dashed border-neutral-200 rounded-[32px]">
-                <p className="text-neutral-400 font-serif italic">Nenhum pedido aqui.</p>
+              <div className="py-20 text-center border-2 border-dashed border-neutral-200 rounded-[32px] bg-white">
+                <Package className="w-10 h-10 text-neutral-300 mx-auto mb-2" />
+                <p className="text-neutral-400 font-serif italic">Nenhum pedido encontrado neste período.</p>
               </div>
             ) : (
               filteredOrders.map((order) => (
                 <AdminOrderCard 
                   key={order.id} 
                   order={order} 
+                  globalSettings={globalSettings}
                   onUpdateStatus={onUpdateStatus} 
                   onDeletePermanent={onDeletePermanent}
                 />
@@ -1786,17 +1990,65 @@ function AdminView({
         </div>
       )}
 
+      {/* Item 3: AdminProductionTab (Ficha de Produção / Cozinha) */}
+      {activeTab === 'production' && (
+        <AdminProductionTab 
+          orders={orders}
+          catalog={catalog}
+          onUpdateStatus={onUpdateStatus}
+        />
+      )}
+
+      {/* Feature 4: Pronta Entrega / Doces de Hoje */}
+      {activeTab === 'ready_boxes' && (
+        <AdminReadyBoxesTab 
+          readyBoxes={readyBoxes}
+          onSaveBox={onSaveReadyBox || (async () => {})}
+          onDeleteBox={onDeleteReadyBox || (async () => {})}
+          onUpdateQuantity={onUpdateReadyBoxQuantity || (async () => {})}
+          onToggleActive={onToggleReadyBoxActive || (async () => {})}
+        />
+      )}
+
+      {/* Feature 2: Calculadora Reversa de Preço & Lucro Real */}
+      {activeTab === 'calculator' && (
+        <AdminBatchCostCalculator 
+          ingredients={ingredients}
+          catalog={catalog}
+        />
+      )}
+
+      {/* Feature 5: CRM do Cliente & Histórico */}
+      {activeTab === 'crm' && (
+        <AdminCrmTab 
+          orders={orders}
+          customerNotes={customerNotes}
+          onSaveCustomerNotes={onSaveCustomerNotes}
+          globalSettings={globalSettings}
+        />
+      )}
+
+      {/* Item 1, 2, 5 & 6: AdminInventoryTab */}
       {activeTab === 'inventory' && (
-        <InventoryTab 
+        <AdminInventoryTab 
           orders={orders} 
           productCosts={productCosts} 
           onUpdateCost={onUpdateCost} 
-          ingredients={ingredients}
-          onUpdateIngredient={onUpdateIngredient}
-          onDeleteIngredient={onDeleteIngredient}
-          recipes={recipes}
-          onUpdateRecipe={onUpdateRecipe}
-          catalog={catalog}
+          ingredients={ingredients} 
+          onUpdateIngredient={onUpdateIngredient} 
+          onDeleteIngredient={onDeleteIngredient} 
+          recipes={recipes} 
+          onUpdateRecipe={onUpdateRecipe} 
+          catalog={catalog} 
+          globalMinStockAlert={globalSettings.globalMinStockAlert}
+        />
+      )}
+
+      {/* Feature 1: Central de Respostas Rápidas de WhatsApp */}
+      {activeTab === 'quick_replies' && (
+        <AdminQuickRepliesTab 
+          settings={globalSettings}
+          onSaveSettings={onUpdateSettings}
         />
       )}
 
@@ -2335,11 +2587,32 @@ function ReviewsTab({ reviews, onModerate, onDelete }: { reviews: any[], onModer
   );
 }
 
-function AdminOrderCard({ order, onUpdateStatus, onDeletePermanent }: { key?: React.Key, order: any, onUpdateStatus: (id: string, status: string) => void, onDeletePermanent: (id: string) => void }) {
+function AdminOrderCard({ order, globalSettings, onUpdateStatus, onDeletePermanent }: { key?: React.Key, order: any, globalSettings?: any, onUpdateStatus: (id: string, status: string) => void, onDeletePermanent: (id: string) => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isQuickReplyOpen, setIsQuickReplyOpen] = useState(false);
   const isCompleted = order.status === 'completed';
   const isReady = order.status === 'ready';
   const isDeleted = order.status === 'deleted';
+
+  const handleDownloadPdf = () => {
+    generateOrderPdf({
+      orderDetails: {
+        name: order.customerName,
+        date: order.date,
+        time: order.time,
+        paymentMethod: order.paymentMethod,
+        changeAmount: order.changeAmount,
+        notes: order.notes
+      },
+      items: order.items,
+      total: order.total,
+      pixKey: globalSettings?.pixKey || '03972289960',
+      pickupAddress: globalSettings?.pickupAddress || 'Avenida Padre Jose Stefanello, n°340',
+      contactPhone: globalSettings?.contactPhone || '5544998542446',
+      orderNumber: order.id.slice(-6).toUpperCase(),
+      isFormalProposal: false
+    });
+  };
 
   return (
     <div className={cn(
@@ -2440,6 +2713,28 @@ function AdminOrderCard({ order, onUpdateStatus, onDeletePermanent }: { key?: Re
                   )}
 
                   <div className="flex flex-wrap gap-2 justify-end pt-4">
+                    {/* Baixar PDF do Pedido */}
+                    <button
+                      type="button"
+                      onClick={handleDownloadPdf}
+                      className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-brand-wine text-[10px] font-black rounded-lg transition-all flex items-center gap-1.5 border border-neutral-200 shadow-sm"
+                      title="Baixar Pedido/Orçamento em PDF"
+                    >
+                      <Download className="w-3.5 h-3.5 text-brand-wine" />
+                      BAIXAR PDF
+                    </button>
+
+                    {/* Resposta Rápida WhatsApp */}
+                    <button
+                      type="button"
+                      onClick={() => setIsQuickReplyOpen(true)}
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                      title="Enviar Resposta Rápida no WhatsApp"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      WHATSAPP RÁPIDO
+                    </button>
+
                     {/* Normal Actions */}
                     {!isDeleted && (
                       <>
@@ -2498,6 +2793,17 @@ function AdminOrderCard({ order, onUpdateStatus, onDeletePermanent }: { key?: Re
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Quick Reply Modal */}
+      {isQuickReplyOpen && (
+        <QuickReplyModal
+          isOpen={isQuickReplyOpen}
+          onClose={() => setIsQuickReplyOpen(false)}
+          order={order}
+          customPhrases={globalSettings?.quickReplyPhrases}
+          globalSettings={globalSettings}
+        />
+      )}
     </div>
   );
 }
@@ -2583,77 +2889,663 @@ function TrackingView({ orders, onBack }: { orders: any[], onBack: () => void })
 }
 
 function AdminSettingsTab({ settings, onSave }: { settings: any, onSave: (data: any) => void }) {
-  const [formData, setFormData] = useState(settings);
+  const [formData, setFormData] = useState({
+    contactPhone: "5544998542446",
+    googleSheetId: "1LnFf7VKaV4CLedmpiLsWtgt_Z9bZJKuyLrPfevybQc0",
+    pixKey: "03972289960",
+    pickupAddress: "Avenida Padre Jose Stefanello, n°340",
+    businessHours: "Ter a Dom • 10h às 18h",
+    storeStatusText: "Aceitando Encomendas & Pronta Entrega",
+    storeStatusMode: "open" as 'open' | 'limited' | 'paused',
+    announcementBanner: "",
+    instagramUrl: "https://instagram.com/s.e_docesgourmet",
+    minNoticeHours: 48,
+    blockedDates: [] as string[],
+    // Item 2: Entrega vs Retirada
+    deliveryMode: "delivery_and_pickup" as 'pickup_only' | 'delivery_and_pickup',
+    deliveryFeeType: "fixed" as 'fixed' | 'to_consult',
+    deliveryFixedFee: 10,
+    freeDeliveryThreshold: 0,
+    // Item 3: Descontos Automáticos por Volume
+    enableVolumeDiscount: true,
+    volumeDiscountMinItems: 200,
+    volumeDiscountPercent: 5,
+    volumeDiscountMessage: "🎉 Parabéns! Desconto de 5% aplicado para pedidos acima de 200 doces.",
+    // Item 4: Notificação Sonora
+    enableOrderSoundNotification: true,
+    // Item 5: Template de WhatsApp
+    customWhatsAppTemplate: DEFAULT_WHATSAPP_TEMPLATE,
+    // Item 6: Alerta de Estoque Mínimo Global
+    globalMinStockAlert: 2,
+    ...settings
+  });
+
+  const [newBlockedDate, setNewBlockedDate] = useState('');
 
   useEffect(() => {
-    setFormData(settings);
+    setFormData(prev => ({
+      ...prev,
+      ...settings,
+      blockedDates: Array.isArray(settings?.blockedDates) ? settings.blockedDates : []
+    }));
   }, [settings]);
+
+  const handleAddBlockedDate = () => {
+    if (!newBlockedDate) return;
+    const current = Array.isArray(formData.blockedDates) ? formData.blockedDates : [];
+    if (current.includes(newBlockedDate)) {
+      alert("Esta data já está bloqueada!");
+      return;
+    }
+    const updated = [...current, newBlockedDate].sort();
+    setFormData({ ...formData, blockedDates: updated });
+    setNewBlockedDate('');
+  };
+
+  const handleRemoveBlockedDate = (dateToRemove: string) => {
+    const current = Array.isArray(formData.blockedDates) ? formData.blockedDates : [];
+    const updated = current.filter(d => d !== dateToRemove);
+    setFormData({ ...formData, blockedDates: updated });
+  };
+
+  const insertTagIntoTemplate = (tag: string) => {
+    setFormData(prev => ({
+      ...prev,
+      customWhatsAppTemplate: (prev.customWhatsAppTemplate || '') + tag
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(formData);
-    alert("Configurações atualizadas com sucesso!");
   };
 
   return (
-    <div className="bg-white rounded-[32px] border border-neutral-100 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 p-8 max-w-2xl">
-      <div className="mb-8">
-        <h3 className="text-xl font-serif text-brand-wine italic">Configurações Gerais</h3>
-        <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mt-1">
-          Ajuste as informações básicas do site
-        </p>
-      </div>
+    <div className="space-y-6 max-w-3xl animate-in fade-in slide-in-from-bottom-2 pb-16">
+      <div className="bg-white rounded-[32px] border border-neutral-100 shadow-sm p-6 sm:p-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-neutral-100">
+          <div>
+            <h3 className="text-xl sm:text-2xl font-serif text-brand-wine italic flex items-center gap-2">
+              <Settings className="w-6 h-6 text-brand-gold" />
+              Painel de Configurações
+            </h3>
+            <p className="text-[11px] font-bold text-neutral-400 uppercase tracking-widest mt-1">
+              Personalize regras de entrega, descontos, alertas sonoros, mensagens e estoque
+            </p>
+          </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="space-y-4">
-          <FormField label="WhatsApp para Contato" icon={<MessageCircle className="w-4 h-4" />}>
-            <input 
-              type="text" 
-              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
-              value={formData.contactPhone}
-              onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-              placeholder="Ex: 5544998542446"
-            />
-          </FormField>
-
-          <FormField label="ID da Planilha (Google Sheets)" icon={<LayoutGrid className="w-4 h-4" />}>
-            <input 
-              type="text" 
-              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all font-mono text-xs"
-              value={formData.googleSheetId}
-              onChange={(e) => setFormData({ ...formData, googleSheetId: e.target.value })}
-              placeholder="ID da sua Google Sheets"
-            />
-          </FormField>
-
-          <FormField label="Chave PIX" icon={<DollarSign className="w-4 h-4" />}>
-            <input 
-              type="text" 
-              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
-              value={formData.pixKey}
-              onChange={(e) => setFormData({ ...formData, pixKey: e.target.value })}
-              placeholder="Ex: Seu CPF ou E-mail"
-            />
-          </FormField>
-
-          <FormField label="Endereço de Retirada" icon={<Calendar className="w-4 h-4" />}>
-            <input 
-              type="text" 
-              className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all"
-              value={formData.pickupAddress}
-              onChange={(e) => setFormData({ ...formData, pickupAddress: e.target.value })}
-              placeholder="Ex: Rua, Número, Bairro"
-            />
-          </FormField>
+          {/* Live Status Badge Preview */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-50 border border-neutral-200 text-xs font-semibold self-start sm:self-auto">
+            <span className={cn(
+              "w-2.5 h-2.5 rounded-full",
+              formData.storeStatusMode === 'open' ? "bg-emerald-500" : formData.storeStatusMode === 'limited' ? "bg-amber-500" : "bg-rose-500"
+            )} />
+            <span className="text-neutral-700">{formData.storeStatusText || "Status da Loja"}</span>
+          </div>
         </div>
 
-        <button 
-          type="submit"
-          className="w-full py-4 bg-brand-wine text-brand-gold font-black rounded-xl hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xl shadow-brand-wine/20"
-        >
-          SALVAR ALTERAÇÕES
-        </button>
-      </form>
+        <form onSubmit={handleSubmit} className="space-y-8 mt-6">
+          {/* Seção 1: Horários & Status de Atendimento */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+              <Clock className="w-4 h-4 text-brand-gold" />
+              <span>1. Horários & Status da Loja</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="Horário de Atendimento (Exibido no Banner)" icon={<Clock className="w-4 h-4" />}>
+                <input 
+                  type="text" 
+                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-medium"
+                  value={formData.businessHours}
+                  onChange={(e) => setFormData({ ...formData, businessHours: e.target.value })}
+                  placeholder="Ex: Ter a Dom • 10h às 18h"
+                />
+              </FormField>
+
+              <FormField label="Texto do Status da Loja" icon={<Store className="w-4 h-4" />}>
+                <input 
+                  type="text" 
+                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-medium"
+                  value={formData.storeStatusText}
+                  onChange={(e) => setFormData({ ...formData, storeStatusText: e.target.value })}
+                  placeholder="Ex: Aceitando Encomendas & Pronta Entrega"
+                />
+              </FormField>
+            </div>
+
+            {/* Modo do Status da Loja (Indicador Visual) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-neutral-600 block">
+                Indicador Visual do Status (Cor da Luzinha):
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, storeStatusMode: 'open' })}
+                  className={cn(
+                    "p-3 rounded-2xl border text-xs font-bold flex items-center gap-2.5 transition-all",
+                    formData.storeStatusMode === 'open' 
+                      ? "bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm" 
+                      : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                  )}
+                >
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
+                  <div className="text-left">
+                    <p className="font-bold">Aberto / Normal</p>
+                    <p className="text-[10px] font-normal text-emerald-700">Aceitando encomendas</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, storeStatusMode: 'limited' })}
+                  className={cn(
+                    "p-3 rounded-2xl border text-xs font-bold flex items-center gap-2.5 transition-all",
+                    formData.storeStatusMode === 'limited' 
+                      ? "bg-amber-50 border-amber-300 text-amber-800 shadow-sm" 
+                      : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                  )}
+                >
+                  <span className="w-3 h-3 rounded-full bg-amber-500 shrink-0" />
+                  <div className="text-left">
+                    <p className="font-bold">Vagas Limitadas</p>
+                    <p className="text-[10px] font-normal text-amber-700">Agenda quase cheia</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, storeStatusMode: 'paused' })}
+                  className={cn(
+                    "p-3 rounded-2xl border text-xs font-bold flex items-center gap-2.5 transition-all",
+                    formData.storeStatusMode === 'paused' 
+                      ? "bg-rose-50 border-rose-300 text-rose-800 shadow-sm" 
+                      : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                  )}
+                >
+                  <span className="w-3 h-3 rounded-full bg-rose-500 shrink-0" />
+                  <div className="text-left">
+                    <p className="font-bold">Fechado / Recesso</p>
+                    <p className="text-[10px] font-normal text-rose-700">Pausa temporária</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Banner de Aviso no Topo */}
+            <FormField label="Aviso Especial no Topo do Site (Opcional)" icon={<BellRing className="w-4 h-4" />}>
+              <input 
+                type="text" 
+                className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm"
+                value={formData.announcementBanner || ''}
+                onChange={(e) => setFormData({ ...formData, announcementBanner: e.target.value })}
+                placeholder="Ex: 🍫 Encomendas para Páscoa até 20/03! Deixe vazio para não exibir."
+              />
+            </FormField>
+          </div>
+
+          {/* Seção 2 (Item 2 Escolhido): Opções de Entrega vs. Retirada & Taxas */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+                <Truck className="w-4 h-4 text-brand-gold" />
+                <span>2. Opções de Entrega vs. Retirada & Taxas</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-gold/20 text-brand-wine">Item 2</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-neutral-600 block">Modalidades Disponíveis no Checkout:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, deliveryMode: 'pickup_only' })}
+                    className={cn(
+                      "p-3 rounded-xl border text-xs font-bold transition-all text-left",
+                      formData.deliveryMode === 'pickup_only'
+                        ? "bg-brand-wine text-brand-gold border-brand-wine shadow-sm"
+                        : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                    )}
+                  >
+                    Somente Retirada
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, deliveryMode: 'delivery_and_pickup' })}
+                    className={cn(
+                      "p-3 rounded-xl border text-xs font-bold transition-all text-left",
+                      formData.deliveryMode === 'delivery_and_pickup'
+                        ? "bg-brand-wine text-brand-gold border-brand-wine shadow-sm"
+                        : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                    )}
+                  >
+                    Retirada & Entrega
+                  </button>
+                </div>
+              </div>
+
+              {formData.deliveryMode === 'delivery_and_pickup' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-neutral-600 block">Cobrança da Taxa de Entrega:</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, deliveryFeeType: 'fixed' })}
+                      className={cn(
+                        "p-3 rounded-xl border text-xs font-bold transition-all text-left",
+                        formData.deliveryFeeType === 'fixed'
+                          ? "bg-brand-wine text-brand-gold border-brand-wine shadow-sm"
+                          : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                      )}
+                    >
+                      Taxa Fixa (R$)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, deliveryFeeType: 'to_consult' })}
+                      className={cn(
+                        "p-3 rounded-xl border text-xs font-bold transition-all text-left",
+                        formData.deliveryFeeType === 'to_consult'
+                          ? "bg-brand-wine text-brand-gold border-brand-wine shadow-sm"
+                          : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                      )}
+                    >
+                      A Combinar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {formData.deliveryMode === 'delivery_and_pickup' && formData.deliveryFeeType === 'fixed' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <FormField label="Valor da Taxa Fixa de Entrega (R$)" icon={<DollarSign className="w-4 h-4" />}>
+                  <input 
+                    type="number" 
+                    step="0.50"
+                    min="0"
+                    className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-bold text-brand-wine"
+                    value={formData.deliveryFixedFee ?? 10}
+                    onChange={(e) => setFormData({ ...formData, deliveryFixedFee: parseFloat(e.target.value) || 0 })}
+                    placeholder="10.00"
+                  />
+                </FormField>
+
+                <FormField label="Frete Grátis a partir de (R$ - 0 para desativar)" icon={<Sparkles className="w-4 h-4" />}>
+                  <input 
+                    type="number" 
+                    step="1"
+                    min="0"
+                    className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-bold text-emerald-700"
+                    value={formData.freeDeliveryThreshold ?? 0}
+                    onChange={(e) => setFormData({ ...formData, freeDeliveryThreshold: parseFloat(e.target.value) || 0 })}
+                    placeholder="Ex: 150 para compras acima de R$ 150"
+                  />
+                </FormField>
+              </div>
+            )}
+          </div>
+
+          {/* Seção 3 (Item 3 Escolhido): Descontos Automáticos por Volume / Centos */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+                <Percent className="w-4 h-4 text-brand-gold" />
+                <span>3. Descontos Automáticos por Volume (Ex: Centos / Festas)</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-gold/20 text-brand-wine">Item 3</span>
+            </div>
+
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-neutral-50 border border-neutral-200">
+              <div>
+                <p className="text-xs font-bold text-brand-wine">Ativar Regra de Desconto por Volume no Carrinho</p>
+                <p className="text-[11px] text-neutral-500">Aplica desconto automaticamente quando a quantidade total de doces atinge a meta.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, enableVolumeDiscount: !formData.enableVolumeDiscount })}
+                className={cn(
+                  "w-12 h-6 rounded-full transition-colors relative p-0.5 shrink-0",
+                  formData.enableVolumeDiscount ? "bg-emerald-500" : "bg-neutral-300"
+                )}
+              >
+                <span className={cn(
+                  "block w-5 h-5 rounded-full bg-white transition-transform shadow-xs",
+                  formData.enableVolumeDiscount ? "translate-x-6" : "translate-x-0"
+                )} />
+              </button>
+            </div>
+
+            {formData.enableVolumeDiscount && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="Quantidade Mínima de Doces no Pedido" icon={<Layers className="w-4 h-4" />}>
+                    <input 
+                      type="number" 
+                      min="10"
+                      step="10"
+                      className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-bold text-brand-wine"
+                      value={formData.volumeDiscountMinItems ?? 200}
+                      onChange={(e) => setFormData({ ...formData, volumeDiscountMinItems: parseInt(e.target.value) || 0 })}
+                      placeholder="Ex: 200 (equivalente a 2 centos)"
+                    />
+                  </FormField>
+
+                  <FormField label="Porcentagem de Desconto Aplicada (%)" icon={<Percent className="w-4 h-4" />}>
+                    <input 
+                      type="number" 
+                      min="1"
+                      max="100"
+                      step="0.5"
+                      className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-bold text-emerald-700"
+                      value={formData.volumeDiscountPercent ?? 5}
+                      onChange={(e) => setFormData({ ...formData, volumeDiscountPercent: parseFloat(e.target.value) || 0 })}
+                      placeholder="Ex: 5"
+                    />
+                  </FormField>
+                </div>
+
+                <FormField label="Mensagem do Desconto (Exibida no Carrinho e WhatsApp)" icon={<Sparkles className="w-4 h-4" />}>
+                  <input 
+                    type="text" 
+                    className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-medium"
+                    value={formData.volumeDiscountMessage || ''}
+                    onChange={(e) => setFormData({ ...formData, volumeDiscountMessage: e.target.value })}
+                    placeholder="Ex: 🎉 Parabéns! Desconto de 5% aplicado para pedidos acima de 200 doces."
+                  />
+                </FormField>
+              </div>
+            )}
+          </div>
+
+          {/* Seção 4 (Item 4 Escolhido): Notificação Sonora de Novo Pedido */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+                <Volume2 className="w-4 h-4 text-brand-gold" />
+                <span>4. Notificação Sonora de Novo Pedido</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-gold/20 text-brand-wine">Item 4</span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-neutral-50 border border-neutral-200">
+              <div>
+                <p className="text-xs font-bold text-brand-wine">Tocar Campainha Sonora ao Receber Pedido</p>
+                <p className="text-[11px] text-neutral-500">Toca um alerta sonoro harmônico instantaneamente no navegador quando um novo pedido entra.</p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => playNewOrderNotification()}
+                  className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs"
+                  title="Testar como soa o alerta de novo pedido"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                  Testar Som 🔔
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, enableOrderSoundNotification: !formData.enableOrderSoundNotification })}
+                  className={cn(
+                    "w-12 h-6 rounded-full transition-colors relative p-0.5",
+                    formData.enableOrderSoundNotification ? "bg-emerald-500" : "bg-neutral-300"
+                  )}
+                >
+                  <span className={cn(
+                    "block w-5 h-5 rounded-full bg-white transition-transform shadow-xs",
+                    formData.enableOrderSoundNotification ? "translate-x-6" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 5 (Item 5 Escolhido): Mensagem Padrão de WhatsApp Pré-formatada */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+                <MessageCircle className="w-4 h-4 text-brand-gold" />
+                <span>5. Mensagem Padrão de WhatsApp Pré-formatada</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, customWhatsAppTemplate: DEFAULT_WHATSAPP_TEMPLATE })}
+                  className="text-[10px] font-bold text-neutral-500 hover:text-brand-wine underline flex items-center gap-1"
+                  title="Restaurar formato original"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Restaurar Padrão
+                </button>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-gold/20 text-brand-wine">Item 5</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-600 block">
+                Template da Mensagem Enviada pelo Cliente no WhatsApp:
+              </label>
+              <textarea 
+                rows={9}
+                className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all font-mono text-xs text-neutral-700 leading-relaxed"
+                value={formData.customWhatsAppTemplate || DEFAULT_WHATSAPP_TEMPLATE}
+                onChange={(e) => setFormData({ ...formData, customWhatsAppTemplate: e.target.value })}
+              />
+
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block">
+                  Tags dinâmicas disponíveis (clique para inserir):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    '{saudacao}',
+                    '{nome_cliente}',
+                    '{bloco_itens}',
+                    '{bloco_entrega}',
+                    '{bloco_desconto}',
+                    '{valor_total}',
+                    '{data_formatada}',
+                    '{horario}',
+                    '{forma_pagamento}',
+                    '{bloco_troco}',
+                    '{bloco_pix}',
+                    '{bloco_obs}'
+                  ].map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => insertTagIntoTemplate(tag)}
+                      className="px-2 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-[10px] font-mono font-bold transition-all border border-neutral-200"
+                    >
+                      +{tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seção 6 (Item 6 Escolhido): Alerta de Estoque Mínimo Global */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>6. Alerta de Estoque Mínimo Global</span>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-gold/20 text-brand-wine">Item 6</span>
+            </div>
+
+            <FormField label="Quantidade Mínima de Segurança Padrão (Unidades ou Kg)" icon={<AlertTriangle className="w-4 h-4 text-amber-500" />}>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="number" 
+                  min="0"
+                  step="0.5"
+                  className="w-32 p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all font-bold text-amber-800 text-base"
+                  value={formData.globalMinStockAlert ?? 2}
+                  onChange={(e) => setFormData({ ...formData, globalMinStockAlert: parseFloat(e.target.value) || 0 })}
+                  placeholder="2"
+                />
+                <span className="text-xs text-neutral-500 font-medium leading-tight">
+                  Quando o estoque de qualquer ingrediente/insumo estiver abaixo desse valor, o painel de estoque exibirá alertas visuais em vermelho e filtragem prioritária.
+                </span>
+              </div>
+            </FormField>
+          </div>
+
+          {/* Seção 7: Contato, Endereço, PIX & Redes */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+              <MapPin className="w-4 h-4 text-brand-gold" />
+              <span>7. Localização, Contato & Chave PIX</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="WhatsApp para Pedidos (com DDI e DDD)" icon={<MessageCircle className="w-4 h-4" />}>
+                <input 
+                  type="text" 
+                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-mono"
+                  value={formData.contactPhone}
+                  onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                  placeholder="Ex: 5544998542446"
+                />
+              </FormField>
+
+              <FormField label="Chave PIX Oficial" icon={<DollarSign className="w-4 h-4" />}>
+                <input 
+                  type="text" 
+                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-medium"
+                  value={formData.pixKey}
+                  onChange={(e) => setFormData({ ...formData, pixKey: e.target.value })}
+                  placeholder="Ex: 03972289960 ou seu e-mail"
+                />
+              </FormField>
+
+              <FormField label="Endereço Completo de Retirada" icon={<MapPin className="w-4 h-4" />}>
+                <input 
+                  type="text" 
+                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm font-medium"
+                  value={formData.pickupAddress}
+                  onChange={(e) => setFormData({ ...formData, pickupAddress: e.target.value })}
+                  placeholder="Ex: Avenida Padre Jose Stefanello, n°340"
+                />
+              </FormField>
+
+              <FormField label="Link do Instagram Oficial" icon={<Instagram className="w-4 h-4" />}>
+                <input 
+                  type="text" 
+                  className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-sm"
+                  value={formData.instagramUrl || ''}
+                  onChange={(e) => setFormData({ ...formData, instagramUrl: e.target.value })}
+                  placeholder="Ex: https://instagram.com/s.e_docesgourmet"
+                />
+              </FormField>
+            </div>
+          </div>
+
+          {/* Seção 8: Regras de Encomenda & Calendário */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+              <Calendar className="w-4 h-4 text-brand-gold" />
+              <span>8. Regras de Encomenda & Bloqueio de Datas</span>
+            </div>
+
+            <FormField label="Antecedência Mínima para Encomendas (em Horas)" icon={<Clock className="w-4 h-4" />}>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="number" 
+                  min={0}
+                  step={1}
+                  className="w-32 p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all font-bold text-brand-wine text-base"
+                  value={formData.minNoticeHours ?? 48}
+                  onChange={(e) => setFormData({ ...formData, minNoticeHours: parseInt(e.target.value) || 0 })}
+                  placeholder="Ex: 48"
+                />
+                <span className="text-xs text-neutral-500 font-medium">
+                  {formData.minNoticeHours ? `(${Math.round(formData.minNoticeHours / 24 * 10) / 10} dias de antecedência no calendário do cliente)` : 'Sem antecedência mínima'}
+                </span>
+              </div>
+            </FormField>
+
+            <FormField label="Bloquear Datas no Calendário (Feriados / Dias Fechados / Lotados)" icon={<Calendar className="w-4 h-4" />}>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <input 
+                    type="date" 
+                    className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all text-xs flex-grow"
+                    value={newBlockedDate}
+                    onChange={(e) => setNewBlockedDate(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddBlockedDate}
+                    className="px-4 py-2 bg-brand-wine text-brand-gold font-bold text-xs rounded-xl hover:bg-brand-wine/90 transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Bloquear Data
+                  </button>
+                </div>
+
+                {/* Blocked Dates List */}
+                <div className="p-3.5 bg-neutral-50 rounded-2xl border border-neutral-200 min-h-[60px] flex flex-wrap gap-2 items-center">
+                  {(formData.blockedDates || []).length === 0 ? (
+                    <span className="text-xs text-neutral-400 italic">Nenhuma data bloqueada no momento. Os clientes podem encomendar em qualquer data válida.</span>
+                  ) : (
+                    formData.blockedDates.map((dateStr: string) => (
+                      <span
+                        key={dateStr}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-xl text-xs font-bold shadow-2xs"
+                      >
+                        <Calendar className="w-3 h-3 text-red-500" />
+                        {dateStr.split('-').reverse().join('/')}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBlockedDate(dateStr)}
+                          className="p-0.5 hover:bg-red-200/60 rounded-full transition-colors ml-1 text-red-500 hover:text-red-800"
+                          title="Desbloquear esta data"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </FormField>
+          </div>
+
+          {/* Seção 9: Planilha do Cardápio */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+              <LayoutGrid className="w-4 h-4 text-brand-gold" />
+              <span>9. Integrações de Dados (Google Sheets)</span>
+            </div>
+
+            <FormField label="ID da Planilha do Google Sheets (Cardápio / Produtos)" icon={<LayoutGrid className="w-4 h-4" />}>
+              <input 
+                type="text" 
+                className="w-full p-3 bg-neutral-50 border border-neutral-200 rounded-xl focus:border-brand-wine outline-none transition-all font-mono text-xs text-neutral-700"
+                value={formData.googleSheetId}
+                onChange={(e) => setFormData({ ...formData, googleSheetId: e.target.value })}
+                placeholder="ID da sua planilha pública do Google Sheets"
+              />
+            </FormField>
+          </div>
+
+          <button 
+            type="submit"
+            className="w-full py-4 bg-brand-wine text-brand-gold font-black rounded-2xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 shadow-xl shadow-brand-wine/25 text-sm tracking-wide cursor-pointer"
+          >
+            <CheckCircle2 className="w-5 h-5 text-brand-gold" />
+            SALVAR TODAS AS CONFIGURAÇÕES
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
+
+export default App;

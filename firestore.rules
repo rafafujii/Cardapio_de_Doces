@@ -82,5 +82,14 @@ service cloud.firestore {
     match /recipes/{productName} {
       allow read, write: if isAdmin();
     }
+
+    match /ready_boxes/{boxId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /customer_notes/{customerKey} {
+      allow read, write: if isAdmin();
+    }
   }
 }

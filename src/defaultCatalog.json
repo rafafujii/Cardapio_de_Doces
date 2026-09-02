@@ -1,0 +1,387 @@
+[
+  {
+    "category": "Doces Tradicionais",
+    "items": [
+      {
+        "id": 1,
+        "category": "Doces Tradicionais",
+        "name": "Brigadeiro Tradicional (Granulado)",
+        "priceCento": 150.0,
+        "unitPrice": 1.5,
+        "imageUrl": "https://via.placeholder.com/400x300/800020/D4AF37?text=Tradicional+Granulado",
+        "badge": null
+      },
+      {
+        "id": 2,
+        "category": "Doces Tradicionais",
+        "name": "Brigadeiro Tradicional (Choco Ball)",
+        "priceCento": 150.0,
+        "unitPrice": 1.5,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 3,
+        "category": "Doces Tradicionais",
+        "name": "Brigadeiro tradicional (Coco)",
+        "priceCento": 150.0,
+        "unitPrice": 1.5,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 4,
+        "category": "Doces Tradicionais",
+        "name": "Brigadeiro de Churros",
+        "priceCento": 160.0,
+        "unitPrice": 1.6,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 5,
+        "category": "Doces Tradicionais",
+        "name": "Beijinho",
+        "priceCento": 165.0,
+        "unitPrice": 1.65,
+        "imageUrl": "https://i.postimg.cc/3xqRKXVJ/imagem-2026-05-10-204822103.png",
+        "badge": null
+      }
+    ]
+  },
+  {
+    "category": "Doces Gourmet",
+    "items": [
+      {
+        "id": 6,
+        "category": "Doces Gourmet",
+        "name": "Brigadeiro Melken",
+        "priceCento": 250.0,
+        "unitPrice": 2.5,
+        "imageUrl": "https://i.postimg.cc/26Q8FP6N/imagem-2026-05-10-204852967.png",
+        "badge": "🌟 Mais Vendidos 🌟"
+      },
+      {
+        "id": 7,
+        "category": "Doces Gourmet",
+        "name": "Brigadeiro Melken com Granulé Mesclado",
+        "priceCento": 250.0,
+        "unitPrice": 2.5,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 8,
+        "category": "Doces Gourmet",
+        "name": "Brigadeiro de Caramelo",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 9,
+        "category": "Doces Gourmet",
+        "name": "Brigadeiro de Creme Brûlée",
+        "priceCento": 165.0,
+        "unitPrice": 1.65,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 10,
+        "category": "Doces Gourmet",
+        "name": "Mini rocambole de Ninho",
+        "priceCento": 270.0,
+        "unitPrice": 2.7,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 11,
+        "category": "Doces Gourmet",
+        "name": "Surpresa de Uva Crocante",
+        "priceCento": 300.0,
+        "unitPrice": 3.0,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 12,
+        "category": "Doces Gourmet",
+        "name": "Surpresa de Uva de Ninho",
+        "priceCento": 260.0,
+        "unitPrice": 2.6,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 13,
+        "category": "Doces Gourmet",
+        "name": "Surpresa de Cereja (Branco)",
+        "priceCento": 450.0,
+        "unitPrice": 4.5,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 14,
+        "category": "Doces Gourmet",
+        "name": "Surpresa de Cereja (Preto)",
+        "priceCento": 450.0,
+        "unitPrice": 4.5,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 15,
+        "category": "Doces Gourmet",
+        "name": "Ninho Saborizado (Morango)",
+        "priceCento": 150.0,
+        "unitPrice": 1.5,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 16,
+        "category": "Doces Gourmet",
+        "name": "Ninho Saborizado (Limão)",
+        "priceCento": 150.0,
+        "unitPrice": 1.5,
+        "imageUrl": "",
+        "badge": null
+      }
+    ]
+  },
+  {
+    "category": "Bombons",
+    "items": [
+      {
+        "id": 17,
+        "category": "Bombons",
+        "name": "Bombom de Ninho (Branco)",
+        "priceCento": 230.0,
+        "unitPrice": 2.3,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 18,
+        "category": "Bombons",
+        "name": "Bombom de Ninho (Preto)",
+        "priceCento": 230.0,
+        "unitPrice": 2.3,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 19,
+        "category": "Bombons",
+        "name": "Bombom de Prestigio (Branco)",
+        "priceCento": 240.0,
+        "unitPrice": 2.4,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 20,
+        "category": "Bombons",
+        "name": "Bombom de Prestigio (Preto)",
+        "priceCento": 240.0,
+        "unitPrice": 2.4,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 21,
+        "category": "Bombons",
+        "name": "Bombom de Prestigio Crocante (Branco)",
+        "priceCento": 260.0,
+        "unitPrice": 2.6,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 22,
+        "category": "Bombons",
+        "name": "Bombom de Prestigio Crocante (Preto)",
+        "priceCento": 260.0,
+        "unitPrice": 2.6,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 23,
+        "category": "Bombons",
+        "name": "Bombom Chokito (Branco)",
+        "priceCento": 260.0,
+        "unitPrice": 2.6,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 24,
+        "category": "Bombons",
+        "name": "Bombom Chokito (Preto)",
+        "priceCento": 260.0,
+        "unitPrice": 2.6,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 25,
+        "category": "Bombons",
+        "name": "Bombom Charge (Branco)",
+        "priceCento": 300.0,
+        "unitPrice": 3.0,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 26,
+        "category": "Bombons",
+        "name": "Bombom Charge (Preto)",
+        "priceCento": 300.0,
+        "unitPrice": 3.0,
+        "imageUrl": "",
+        "badge": null
+      }
+    ]
+  },
+  {
+    "category": "Doces Finos",
+    "items": [
+      {
+        "id": 27,
+        "category": "Doces Finos",
+        "name": "Brigadeiro de Pistache",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 28,
+        "category": "Doces Finos",
+        "name": "Bombom tipo Raffaello",
+        "priceCento": 450.0,
+        "unitPrice": 4.5,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 29,
+        "category": "Doces Finos",
+        "name": "Copinho de Cereja",
+        "priceCento": 460.0,
+        "unitPrice": 4.6,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 30,
+        "category": "Doces Finos",
+        "name": "Trufa",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 31,
+        "category": "Doces Finos",
+        "name": "Bombom Aberto de Morango",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 32,
+        "category": "Doces Finos",
+        "name": "Trufa de Ninho meio Amargo",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      }
+    ]
+  },
+  {
+    "category": "Sobremesas",
+    "items": [
+      {
+        "id": 33,
+        "category": "Sobremesas",
+        "name": "Pudim de Leite Condensado (Grande)",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 34,
+        "category": "Sobremesas",
+        "name": "Pudim de Leite Condensado (Mini)",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 35,
+        "category": "Sobremesas",
+        "name": "Banoffe",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 36,
+        "category": "Sobremesas",
+        "name": "Torta de Limão",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 37,
+        "category": "Sobremesas",
+        "name": "Surpresa de Morango",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 38,
+        "category": "Sobremesas",
+        "name": "Surpresa de Uva",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 39,
+        "category": "Sobremesas",
+        "name": "Surpresa de Morango e Uva",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      },
+      {
+        "id": 40,
+        "category": "Sobremesas",
+        "name": "Nuvem com Geleia de Morango",
+        "priceCento": null,
+        "unitPrice": null,
+        "imageUrl": "",
+        "badge": null
+      }
+    ]
+  }
+]

@@ -78,6 +78,41 @@
       },
       "required": ["productName", "ingredients"]
     },
+    "ReadyBox": {
+      "title": "Ready Box",
+      "description": "Daily sweet boxes for quick immediate order",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "itemsCount": { "type": "number" },
+        "price": { "type": "number" },
+        "originalPrice": { "type": "number" },
+        "quantityAvailable": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "pickupUntilTime": { "type": "string" },
+        "badgeText": { "type": "string" },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "price", "quantityAvailable", "active"]
+    },
+    "CustomerNote": {
+      "title": "Customer Note",
+      "description": "Confectioner CRM notes, VIP preferences, tags and birthday",
+      "type": "object",
+      "properties": {
+        "customerPhone": { "type": "string" },
+        "customerName": { "type": "string" },
+        "birthday": { "type": "string" },
+        "notes": { "type": "string" },
+        "tags": { 
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "GlobalSettings": {
       "title": "Global Settings",
       "description": "General site-wide configuration",
@@ -111,6 +146,14 @@
     "/recipes/{productName}": {
       "schema": "Recipe",
       "description": "Product recipe definitions"
+    },
+    "/ready_boxes/{boxId}": {
+      "schema": "ReadyBox",
+      "description": "Daily ready-to-deliver sweet boxes for immediate pickup"
+    },
+    "/customer_notes/{customerKey}": {
+      "schema": "CustomerNote",
+      "description": "Confectioner CRM notes and customer preferences"
     },
     "/settings/global": {
       "schema": "GlobalSettings",
