@@ -33,7 +33,7 @@ export const DEFAULT_QUICK_REPLIES: QuickReplyPhrase[] = [
     id: "qr-post-sale-review",
     title: "5. Pós-Venda & Avaliação",
     category: "pos_venda",
-    template: "Oi, {nome}! Passando para saber: o que achou dos nossos doces gourmet? Ficamos muito felizes em adoçar o seu momento! 🥰\n\nSe puder deixar uma rápida avaliação ou recadinho no nosso catálogo, você nos ajuda muito:\n👉 {link_catalogo}\n\nUm grande abraço e até a próxima! ❤️🍫",
+    template: "Oi, {nome}! Passando para saber: o que achou dos nossos doces gourmet? Ficamos muito felizes em adoçar o seu momento! 🥰\n\nSe puder deixar uma rápida avaliação de 5 estrelas no link abaixo, você nos ajuda muito:\n👉 {link_avaliacao}\n\nMuito obrigado pelo carinho e até a próxima! ❤️🍫",
     isDefault: true
   },
   {
@@ -65,11 +65,17 @@ export function formatQuickReply(
     deliveryAddress?: string;
     pixKey?: string;
     catalogUrl?: string;
+    reviewUrl?: string;
   }
 ): string {
   let result = template;
-  result = result.replace(/{nome}/g, data.customerName || "Cliente");
-  result = result.replace(/{numero_pedido}/g, data.orderNumber || "---");
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://cardapio-de-doces.vercel.app';
+  const shortOrder = data.orderNumber || "DOCES";
+  const clientName = data.customerName || "Cliente";
+  const defaultReviewUrl = data.reviewUrl || `${origin}/?avaliar=true&pedido=${shortOrder}&cliente=${encodeURIComponent(clientName)}`;
+
+  result = result.replace(/{nome}/g, clientName);
+  result = result.replace(/{numero_pedido}/g, shortOrder);
   result = result.replace(/{itens}/g, data.itemsSummary || "");
   result = result.replace(/{total}/g, data.totalAmount || "R$ 0,00");
   result = result.replace(/{data}/g, data.pickupDate || "");
@@ -77,7 +83,8 @@ export function formatQuickReply(
   result = result.replace(/{endereco}/g, data.pickupAddress || "Avenida Padre Jose Stefanello, n°340");
   result = result.replace(/{endereco_entrega}/g, data.deliveryAddress || data.pickupAddress || "");
   result = result.replace(/{chave_pix}/g, data.pixKey || "03972289960");
-  result = result.replace(/{link_catalogo}/g, data.catalogUrl || window.location.origin);
+  result = result.replace(/{link_catalogo}/g, data.catalogUrl || origin);
+  result = result.replace(/{link_avaliacao}/g, defaultReviewUrl);
   return result;
 }
 

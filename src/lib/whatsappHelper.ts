@@ -25,6 +25,8 @@ export interface WhatsAppMessageParams {
   cartSubtotal: number;
   finalTotal: number;
   discountAmount?: number;
+  couponCode?: string;
+  couponDiscount?: number;
   deliveryFee?: number;
   pickupAddress: string;
   pixKey: string;
@@ -37,6 +39,8 @@ export function buildWhatsAppMessage({
   cartSubtotal,
   finalTotal,
   discountAmount = 0,
+  couponCode,
+  couponDiscount = 0,
   deliveryFee = 0,
   pickupAddress,
   pixKey,
@@ -56,7 +60,11 @@ export function buildWhatsAppMessage({
   
   let blocoDesconto = '';
   if (discountAmount > 0) {
-    blocoDesconto = `🎁 *Desconto por Volume:* -${formatCurrency(discountAmount)}\n`;
+    blocoDesconto += `🎁 *Desconto por Volume:* -${formatCurrency(discountAmount)}\n`;
+  }
+  if (couponDiscount > 0 && (couponCode || orderDetails.couponCode)) {
+    const code = couponCode || orderDetails.couponCode;
+    blocoDesconto += `🎟️ *Cupom (${code}):* -${formatCurrency(couponDiscount)}\n`;
   }
 
   let blocoEntrega = '';

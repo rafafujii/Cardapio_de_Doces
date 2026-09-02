@@ -25,7 +25,8 @@ import {
 import confetti from 'canvas-confetti';
 import { cn, formatCurrency, getProductUnitPrice } from '../lib/utils';
 import { generateOrderPdf } from '../lib/pdfGenerator';
-import type { CartItem, OrderDetails } from '../types';
+import type { CartItem, OrderDetails, Coupon } from '../types';
+import { validateCoupon } from '../lib/couponHelper';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -46,6 +47,11 @@ interface CheckoutModalProps {
   volumeDiscountPercent?: number;
   volumeDiscountMessage?: string;
   customWhatsAppTemplate?: string;
+  coupons?: Coupon[];
+  appliedCouponCode?: string;
+  onApplyCoupon?: (code: string) => void;
+  onRemoveCoupon?: () => void;
+  enableCoupons?: boolean;
   onOrderCompleted: (orderDetails: OrderDetails) => void;
 }
 
@@ -70,6 +76,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   volumeDiscountPercent = 5,
   volumeDiscountMessage = '',
   customWhatsAppTemplate,
+  coupons = [],
+  appliedCouponCode = '',
+  onApplyCoupon,
+  onRemoveCoupon,
+  enableCoupons = true,
   onOrderCompleted
 }) => {
   // Calculate earliest available date based on admin minNoticeHours
@@ -95,6 +106,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [errors, setErrors] = useState<{ name?: string; date?: string; time?: string; deliveryAddress?: string }>({});
   const [copiedPix, setCopiedPix] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkoutCouponInput, setCheckoutCouponInput] = useState('');
+  const [checkoutCouponFeedback, setCheckoutCouponFeedback] = useState<{ msg: string; isError: boolean } | null>(null);
 
   // Total quantity of items for volume discount calculation
   const totalQuantity = useMemo(() => {
@@ -115,11 +128,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return (cartTotal * (volumeDiscountPercent || 0)) / 100;
   }, [isVolumeDiscountApplicable, cartTotal, volumeDiscountPercent]);
 
+  // Coupon discount calculation
+  const couponValidation = useMemo(() => {
+    if (!appliedCouponCode) return null;
+    return validateCoupon(appliedCouponCode, cartTotal, coupons, enableCoupons);
+  }, [appliedCouponCode, cartTotal, coupons, enableCoupons]);
+
+  const couponDiscount = useMemo(() => {
+    return couponValidation?.valid ? couponValidation.discountAmount : 0;
+  }, [couponValidation]);
+
   // Delivery fee calculation (Item 2)
   const isFreeDelivery = useMemo(() => {
     if (details.deliveryType !== 'delivery') return false;
-    return freeDeliveryThreshold > 0 && (cartTotal - discountAmount) >= freeDeliveryThreshold;
-  }, [details.deliveryType, freeDeliveryThreshold, cartTotal, discountAmount]);
+    return freeDeliveryThreshold > 0 && (cartTotal - discountAmount - couponDiscount) >= freeDeliveryThreshold;
+  }, [details.deliveryType, freeDeliveryThreshold, cartTotal, discountAmount, couponDiscount]);
 
   const currentDeliveryFee = useMemo(() => {
     if (details.deliveryType !== 'delivery' || deliveryMode === 'pickup_only') return 0;
@@ -129,8 +152,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   }, [details.deliveryType, deliveryMode, isFreeDelivery, deliveryFeeType, deliveryFixedFee]);
 
   const finalTotal = useMemo(() => {
-    return Math.max(0, cartTotal - discountAmount + currentDeliveryFee);
-  }, [cartTotal, discountAmount, currentDeliveryFee]);
+    return Math.max(0, cartTotal - discountAmount - couponDiscount + currentDeliveryFee);
+  }, [cartTotal, discountAmount, couponDiscount, currentDeliveryFee]);
 
   if (!isOpen) return null;
 
@@ -140,13 +163,32 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setTimeout(() => setCopiedPix(false), 2500);
   };
 
+  const handleApplyCheckoutCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkoutCouponInput.trim()) return;
+
+    const res = validateCoupon(checkoutCouponInput, cartTotal, coupons, enableCoupons);
+    if (res.valid) {
+      if (onApplyCoupon) {
+        onApplyCoupon(checkoutCouponInput.trim().toUpperCase());
+      }
+      setCheckoutCouponFeedback({ msg: res.message, isError: false });
+      setCheckoutCouponInput('');
+    } else {
+      setCheckoutCouponFeedback({ msg: res.message, isError: true });
+    }
+    setTimeout(() => setCheckoutCouponFeedback(null), 4000);
+  };
+
   const handleDownloadPdf = () => {
     const itemsList = Object.values(cart) as CartItem[];
     generateOrderPdf({
       orderDetails: {
         ...details,
         deliveryFee: currentDeliveryFee,
-        discountAmount
+        discountAmount,
+        couponCode: couponValidation?.valid ? appliedCouponCode : undefined,
+        couponDiscount: couponDiscount
       },
       items: itemsList,
       total: finalTotal,
@@ -214,7 +256,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     onOrderCompleted({
       ...details,
       deliveryFee: currentDeliveryFee,
-      discountAmount
+      discountAmount,
+      couponCode: couponValidation?.valid ? appliedCouponCode : undefined,
+      couponDiscount
     });
     setIsSubmitting(false);
   };
@@ -624,6 +668,60 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     Desconto por Volume ({volumeDiscountPercent}%)
                   </span>
                   <span>- {formatCurrency(discountAmount)}</span>
+                </div>
+              )}
+
+              {couponDiscount > 0 && (
+                <div className="flex justify-between items-center text-emerald-700 font-bold bg-emerald-50/80 p-1.5 rounded-lg border border-emerald-200">
+                  <span className="flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5" />
+                    Cupom ({appliedCouponCode})
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span>- {formatCurrency(couponDiscount)}</span>
+                    {onRemoveCoupon && (
+                      <button
+                        type="button"
+                        onClick={onRemoveCoupon}
+                        className="text-red-500 hover:text-red-700 text-[10px] uppercase font-black"
+                        title="Remover cupom"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Coupon Input if none applied */}
+              {enableCoupons && !appliedCouponCode && (
+                <div className="pt-1">
+                  <form onSubmit={handleApplyCheckoutCoupon} className="flex gap-1.5">
+                    <div className="relative flex-1">
+                      <Tag className="w-3 h-3 text-neutral-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={checkoutCouponInput}
+                        onChange={(e) => setCheckoutCouponInput(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                        placeholder="Adicionar cupom de desconto"
+                        className="w-full pl-6 pr-2 py-1 bg-white border border-neutral-200 rounded-lg text-[11px] font-mono font-bold uppercase focus:ring-1 focus:ring-brand-wine outline-none"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="px-2.5 py-1 bg-brand-wine hover:bg-black text-brand-gold text-[10px] font-black rounded-lg transition-all uppercase tracking-wider shrink-0"
+                    >
+                      APLICAR
+                    </button>
+                  </form>
+                  {checkoutCouponFeedback && (
+                    <p className={cn(
+                      "text-[10px] font-bold mt-1 px-1",
+                      checkoutCouponFeedback.isError ? "text-red-600" : "text-emerald-700"
+                    )}>
+                      {checkoutCouponFeedback.msg}
+                    </p>
+                  )}
                 </div>
               )}
 

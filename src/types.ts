@@ -29,9 +29,29 @@ export interface OrderDetails {
   deliveryAddress?: string;
   deliveryFee?: number;
   discountAmount?: number;
+  couponCode?: string;
+  couponDiscount?: number;
   finalTotal?: number;
   phone?: string;
   isReadyBoxOrder?: boolean;
+}
+
+export interface Coupon {
+  id?: string;
+  code: string;
+  description?: string;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+  minOrderValue?: number;
+  maxDiscountAmount?: number;
+  usageLimit?: number;
+  usageCount: number;
+  expirationDate?: string;
+  active: boolean;
+  showBanner?: boolean;
+  bannerText?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface QuickReplyPhrase {
@@ -85,6 +105,21 @@ export interface CustomerCRMProfile {
   vipTier: 'gold' | 'frequent' | 'new';
 }
 
+export interface Review {
+  id: string;
+  productName: string;
+  userName: string;
+  userPhone?: string | null;
+  userEmail?: string | null;
+  orderId?: string | null;
+  rating: number;
+  comment: string;
+  status: 'pending' | 'approved' | 'rejected';
+  adminReply?: string;
+  adminReplyAt?: any;
+  createdAt: any;
+}
+
 export interface BatchPanIngredient {
   id: string;
   name: string;
@@ -113,3 +148,65 @@ export interface BatchPanCalculation {
   fixedMonthlyCostTarget?: number;
   breakEvenUnits?: number;
 }
+
+export interface AuditLogChange {
+  field: string;
+  fieldLabel: string;
+  oldValue: any;
+  newValue: any;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  userEmail: string;
+  userName: string;
+  changedFields: AuditLogChange[];
+  summary: string;
+  timestamp: any;
+}
+
+export interface GlobalSettingsState {
+  contactPhone: string;
+  googleSheetId: string;
+  pixKey: string;
+  pickupAddress: string;
+  businessHours: string;
+  storeStatusText: string;
+  storeStatusMode: 'open' | 'limited' | 'paused';
+  announcementBanner: string;
+  instagramUrl: string;
+  minNoticeHours: number;
+  blockedDates: string[];
+  deliveryMode: 'pickup_only' | 'delivery_and_pickup';
+  deliveryFeeType: 'fixed' | 'to_consult';
+  deliveryFixedFee: number;
+  freeDeliveryThreshold: number;
+  enableVolumeDiscount: boolean;
+  volumeDiscountMinItems: number;
+  volumeDiscountPercent: number;
+  volumeDiscountMessage: string;
+  enableOrderSoundNotification: boolean;
+  customWhatsAppTemplate: string;
+  globalMinStockAlert: number;
+  enableCoupons: boolean;
+  enableReviewRewardCoupon: boolean;
+  reviewRewardCouponCode: string;
+  reviewRewardCouponDiscount: string;
+  enablePostSaleFeedback: boolean;
+  postSaleReviewTemplate?: string;
+  // Grupo 1: #6 Wishlist / Favoritos
+  enableWishlist?: boolean;
+  // Grupo 1: #7 PWA & Instalação
+  enablePwaInstallPrompt?: boolean;
+  // Grupo 3: #3 Planejador Semanal de Produção
+  enableProductionCalendar?: boolean;
+  // Grupo 3: #4 Alerta de Estoque Crítico Preditivo
+  enablePredictiveStockAlerts?: boolean;
+  // Grupo 4: #3 Exportação de Relatórios & DRE Consolidado
+  enableConsolidatedReports?: boolean;
+  // Grupo 5: #2 Temas Sazonais
+  seasonalTheme?: 'classic' | 'easter' | 'mothers_day' | 'christmas' | 'halloween';
+  seasonalThemeBanner?: string;
+}
+

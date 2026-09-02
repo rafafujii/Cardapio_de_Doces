@@ -439,3 +439,307 @@ export function exportKitchenProductionPdf({
   const dateSlug = selectedDateLabel.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
   doc.save(`comanda_producao_cozinha_${dateSlug}.pdf`);
 }
+
+/**
+ * Grupo 4 - Item 3: Exportação de Fechamento Consolidado & Demonstrativo DRE Executivo (PDF)
+ */
+export function exportConsolidatedDREClosingReportPdf({
+  orders,
+  productCosts,
+  ingredients,
+  recipes,
+  periodName = 'Mês Atual'
+}: ExportReportData) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const activeOrders = orders.filter(o => o.status !== 'deleted');
+  const now = new Date();
+  const dateFormatted = now.toLocaleDateString('pt-BR');
+  const timeFormatted = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  // Cálculos do DRE
+  let grossProductRevenue = 0;
+  let totalDeliveryFees = 0;
+  let totalDiscountsGiven = 0;
+  let totalCostOfGoods = 0; // CMV - Custo das Mercadorias Vendidas
+  let totalUnitsSold = 0;
+  const paymentMethods: Record<string, number> = { Pix: 0, Dinheiro: 0 };
+  const productsSoldMap: Record<string, { qty: number; revenue: number; cost: number; profit: number }> = {};
+
+  activeOrders.forEach(order => {
+    const finalTotal = order.total || 0;
+    const deliveryFee = Number(order.deliveryFee || 0);
+    const discount = Number(order.discountAmount || 0) + Number(order.couponDiscount || 0);
+
+    totalDeliveryFees += deliveryFee;
+    totalDiscountsGiven += discount;
+    grossProductRevenue += (finalTotal - deliveryFee + discount);
+
+    const pay = order.paymentMethod === 'Dinheiro' ? 'Dinheiro' : 'Pix';
+    paymentMethods[pay] = (paymentMethods[pay] || 0) + finalTotal;
+
+    (order.items || []).forEach((item: any) => {
+      const name = item.name || 'Doce';
+      const qty = Number(item.quantity || 1);
+      const unitCost = calculateProductCost(name, productCosts, ingredients, recipes);
+      const lineCost = unitCost * qty;
+      const unitPrice = item.priceCento ? (item.priceCento / 100) : (item.unitPrice || 0);
+      const lineRevenue = unitPrice * qty;
+
+      totalCostOfGoods += lineCost;
+      totalUnitsSold += qty;
+
+      if (!productsSoldMap[name]) {
+        productsSoldMap[name] = { qty: 0, revenue: 0, cost: 0, profit: 0 };
+      }
+      productsSoldMap[name].qty += qty;
+      productsSoldMap[name].revenue += lineRevenue;
+      productsSoldMap[name].cost += lineCost;
+      productsSoldMap[name].profit += (lineRevenue - lineCost);
+    });
+  });
+
+  const netRevenue = grossProductRevenue - totalDiscountsGiven + totalDeliveryFees;
+  const grossProfit = netRevenue - totalCostOfGoods;
+  const grossMarginPercent = netRevenue > 0 ? ((grossProfit / netRevenue) * 100).toFixed(1) : '0';
+
+  // Header Banner
+  doc.setFillColor(128, 0, 32); // #800020
+  doc.rect(0, 0, 210, 38, 'F');
+  doc.setFillColor(212, 175, 55); // #D4AF37 Gold
+  doc.rect(0, 38, 210, 2.5, 'F');
+
+  // Title
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('S.E DOCES GOURMET', 14, 16);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(243, 229, 171);
+  doc.text('DEMONSTRATIVO DE RESULTADO & FECHAMENTO EXECUTIVO (DRE)', 14, 23);
+  doc.text(`Período de Competência: ${periodName.toUpperCase()} | Emitido em: ${dateFormatted} às ${timeFormatted}`, 14, 30);
+
+  let curY = 48;
+
+  // DRE Financial Breakdown Box
+  doc.setFillColor(252, 250, 246);
+  doc.roundedRect(14, curY, 182, 60, 3, 3, 'F');
+  doc.setDrawColor(220, 210, 195);
+  doc.roundedRect(14, curY, 182, 60, 3, 3, 'D');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(128, 0, 32);
+  doc.text('ESTRUTURA DRE CONSOLIDADA', 20, curY + 8);
+
+  const dreLines = [
+    { label: '(+) Receita Bruta de Produtos', value: formatCurrency(grossProductRevenue), isBold: false, color: [40, 40, 40] },
+    { label: '(-) Deduções & Descontos Comerciais', value: `- ${formatCurrency(totalDiscountsGiven)}`, isBold: false, color: [180, 50, 50] },
+    { label: '(+) Taxas de Entrega / Fretes Recebidos', value: `+ ${formatCurrency(totalDeliveryFees)}`, isBold: false, color: [60, 60, 60] },
+    { label: '(=) RECEITA OPERACIONAL LÍQUIDA', value: formatCurrency(netRevenue), isBold: true, color: [128, 0, 32] },
+    { label: '(-) Custo dos Insumos & Matéria-Prima (CMV)', value: `- ${formatCurrency(totalCostOfGoods)}`, isBold: false, color: [180, 50, 50] },
+    { label: '(=) LUCRO OPERACIONAL BRUTO LÍQUIDO', value: `${formatCurrency(grossProfit)} (${grossMarginPercent}%)`, isBold: true, color: [16, 140, 80] }
+  ];
+
+  let dreLineY = curY + 16;
+  dreLines.forEach(line => {
+    doc.setFont('helvetica', line.isBold ? 'bold' : 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(line.color[0], line.color[1], line.color[2]);
+    doc.text(line.label, 20, dreLineY);
+    doc.text(line.value, 188, dreLineY, { align: 'right' });
+    dreLineY += 7;
+  });
+
+  curY += 68;
+
+  // Key KPI Cards (3 Colunas)
+  const kpiWidth = 58;
+  const kpiHeight = 18;
+  const kpis = [
+    { label: 'PEDIDOS ATENDIDOS', val: `${activeOrders.length} encomendas` },
+    { label: 'DOCES VENDIDOS', val: `${totalUnitsSold.toLocaleString('pt-BR')} un` },
+    { label: 'TICKET MÉDIO', val: formatCurrency(activeOrders.length > 0 ? netRevenue / activeOrders.length : 0) }
+  ];
+
+  kpis.forEach((kpi, idx) => {
+    const x = 14 + idx * (kpiWidth + 4);
+    doc.setFillColor(248, 246, 240);
+    doc.roundedRect(x, curY, kpiWidth, kpiHeight, 2, 2, 'F');
+    doc.setDrawColor(225, 220, 210);
+    doc.roundedRect(x, curY, kpiWidth, kpiHeight, 2, 2, 'D');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(130, 130, 130);
+    doc.text(kpi.label, x + kpiWidth / 2, curY + 6, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(128, 0, 32);
+    doc.text(kpi.val, x + kpiWidth / 2, curY + 14, { align: 'center' });
+  });
+
+  curY += 24;
+
+  // Top Products Breakdown Table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(128, 0, 32);
+  doc.text('DESEMPENHO & MARGEM POR SABOR DE DOCE', 14, curY);
+  curY += 3;
+
+  const topProducts = Object.entries(productsSoldMap)
+    .map(([name, data]) => ({
+      name,
+      ...data,
+      margin: data.revenue > 0 ? Math.round((data.profit / data.revenue) * 100) : 0
+    }))
+    .sort((a, b) => b.qty - a.qty);
+
+  const productRows = topProducts.map(p => [
+    p.name,
+    `${p.qty} un`,
+    formatCurrency(p.revenue),
+    formatCurrency(p.cost),
+    formatCurrency(p.profit),
+    `${p.margin}%`
+  ]);
+
+  autoTable(doc, {
+    startY: curY,
+    head: [['Sabor do Doce', 'Qtd Vendida', 'Faturamento', 'Custo Total', 'Lucro Bruto', 'Margem (%)']],
+    body: productRows.length > 0 ? productRows : [['Nenhum doce vendido no período', '-', '-', '-', '-', '-']],
+    theme: 'grid',
+    headStyles: {
+      fillColor: [128, 0, 32],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center'
+    },
+    bodyStyles: {
+      fontSize: 7.5,
+      textColor: [40, 40, 40],
+      cellPadding: 2.2
+    },
+    alternateRowStyles: {
+      fillColor: [252, 250, 247]
+    },
+    columnStyles: {
+      0: { cellWidth: 55, fontStyle: 'bold' },
+      1: { cellWidth: 25, halign: 'center' },
+      2: { cellWidth: 26, halign: 'right' },
+      3: { cellWidth: 26, halign: 'right' },
+      4: { cellWidth: 26, halign: 'right', fontStyle: 'bold', textColor: [16, 140, 80] },
+      5: { cellWidth: 24, halign: 'center', fontStyle: 'bold' }
+    },
+    margin: { left: 14, right: 14 },
+    didDrawPage: (data) => {
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      doc.setFontSize(7.5);
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        `S.E Doces Gourmet • Fechamento DRE Oficial • Página ${data.pageNumber} de ${pageCount}`,
+        105,
+        290,
+        { align: 'center' }
+      );
+    }
+  });
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  doc.save(`fechamento_dre_se_doces_${periodName.toLowerCase()}_${dateStr}.pdf`);
+}
+
+/**
+ * Exporta a lista preditiva de reposição / compras em PDF
+ */
+export function exportShoppingListPdf({
+  shoppingItems,
+  totalEstimatedCost,
+  periodDays = 7
+}: {
+  shoppingItems: { name: string; unit: string; currentStock: number; neededQuantity: number; missingQuantity: number; estimatedCost: number }[];
+  totalEstimatedCost: number;
+  periodDays?: number;
+}) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const now = new Date();
+  const dateFormatted = now.toLocaleDateString('pt-BR');
+  const timeFormatted = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  // Header Banner
+  doc.setFillColor(128, 0, 32);
+  doc.rect(0, 0, 210, 32, 'F');
+  doc.setFillColor(212, 175, 55);
+  doc.rect(0, 32, 210, 2, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('S.E DOCES GOURMET • SUPRIMENTOS', 14, 15);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(243, 229, 171);
+  doc.text(`LISTA PREDITIVA DE REPOSIÇÃO & COMPRAS (PRÓXIMOS ${periodDays} DIAS)`, 14, 22);
+  doc.text(`Custo Estimado de Compras: ${formatCurrency(totalEstimatedCost)} • Emitido em ${dateFormatted} às ${timeFormatted}`, 14, 27);
+
+  let currentY = 40;
+
+  const tableRows = shoppingItems.map(item => [
+    '[  ]',
+    item.name,
+    `${item.currentStock} ${item.unit}`,
+    `${item.neededQuantity.toFixed(2)} ${item.unit}`,
+    `${item.missingQuantity.toFixed(2)} ${item.unit}`,
+    formatCurrency(item.estimatedCost)
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Comprado?', 'Ingrediente / Insumo', 'Estoque Atual', 'Demanda das Encomendas', 'Falta Comprar', 'Custo Estimado']],
+    body: tableRows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [128, 0, 32],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center'
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [40, 40, 40],
+      cellPadding: 2.5
+    },
+    alternateRowStyles: {
+      fillColor: [252, 250, 247]
+    },
+    columnStyles: {
+      0: { cellWidth: 20, halign: 'center', fontStyle: 'bold' },
+      1: { cellWidth: 55, fontStyle: 'bold' },
+      2: { cellWidth: 25, halign: 'center' },
+      3: { cellWidth: 32, halign: 'center' },
+      4: { cellWidth: 28, halign: 'center', fontStyle: 'bold', textColor: [180, 40, 40] },
+      5: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+    },
+    margin: { left: 14, right: 14 }
+  });
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  doc.save(`lista_compras_insumos_se_doces_${dateStr}.pdf`);
+}
+

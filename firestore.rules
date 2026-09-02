@@ -64,15 +64,21 @@ service cloud.firestore {
       allow read: if true;
       allow list: if isAdmin() || (resource != null && resource.data.status == 'approved');
       
-      // Signed in users can create a pending review
-      allow create: if isSignedIn() && 
-                    request.resource.data.status == 'pending' &&
+      // Customers can create a pending review
+      allow create: if request.resource.data.status == 'pending' && 
                     request.resource.data.rating >= 1 &&
                     request.resource.data.rating <= 5 &&
-                    request.resource.data.createdAt == request.time;
+                    (request.resource.data.createdAt == request.time || request.resource.data.createdAt != null);
       
       // Only admin can update (moderation) or delete
       allow update, delete: if isAdmin();
+    }
+
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      // Allow atomic usage count increment if needed
+      allow update: if isAdmin() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount', 'updatedAt']));
     }
 
     match /ingredients/{ingredientId} {
@@ -89,6 +95,10 @@ service cloud.firestore {
     }
 
     match /customer_notes/{customerKey} {
+      allow read, write: if isAdmin();
+    }
+
+    match /audit_logs/{logId} {
       allow read, write: if isAdmin();
     }
   }

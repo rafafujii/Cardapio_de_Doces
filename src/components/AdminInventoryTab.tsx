@@ -14,9 +14,11 @@ import {
   Layers, 
   ChefHat, 
   Check, 
-  AlertTriangle 
+  AlertTriangle,
+  ShoppingCart
 } from 'lucide-react';
 import { cn, formatCurrency, calculateProductCost, getProductUnitPrice, removeAcentos } from '../lib/utils';
+import { AdminPredictiveStockModal } from './AdminPredictiveStockModal';
 import type { CategoryGroup, Product } from '../types';
 
 interface AdminInventoryTabProps {
@@ -30,6 +32,7 @@ interface AdminInventoryTabProps {
   onUpdateRecipe: (productName: string, items: any[]) => void;
   catalog: CategoryGroup[];
   globalMinStockAlert?: number;
+  enablePredictiveStockAlerts?: boolean;
 }
 
 export function AdminInventoryTab({
@@ -42,7 +45,8 @@ export function AdminInventoryTab({
   recipes,
   onUpdateRecipe,
   catalog,
-  globalMinStockAlert = 2
+  globalMinStockAlert = 2,
+  enablePredictiveStockAlerts = true
 }: AdminInventoryTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<'products' | 'ingredients'>('products');
   const [bulkVal, setBulkVal] = useState('');
@@ -50,6 +54,7 @@ export function AdminInventoryTab({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [marginFilter, setMarginFilter] = useState<'all' | 'with-recipe' | 'no-recipe' | 'high-margin' | 'low-margin'>('all');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'low-stock'>('all');
+  const [isPredictiveModalOpen, setIsPredictiveModalOpen] = useState(false);
 
   // Ingredient Editor State
   const [editingIngredient, setEditingIngredient] = useState<any | null>(null);
@@ -168,28 +173,41 @@ export function AdminInventoryTab({
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-      {/* Sub-Tabs: Doces x Ingredientes */}
-      <div className="flex gap-2 p-1 bg-neutral-100 rounded-2xl w-fit">
-        <button 
-          onClick={() => setActiveSubTab('products')}
-          className={cn(
-            "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
-            activeSubTab === 'products' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
-          )}
-        >
-          <Package className="w-3.5 h-3.5" />
-          Doces & Margens de Lucro
-        </button>
-        <button 
-          onClick={() => setActiveSubTab('ingredients')}
-          className={cn(
-            "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
-            activeSubTab === 'ingredients' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
-          )}
-        >
-          <ChefHat className="w-3.5 h-3.5" />
-          Ingredientes Base ({ingredients.length})
-        </button>
+      {/* Sub-Tabs: Doces x Ingredientes & Predictive Button */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex gap-2 p-1 bg-neutral-100 rounded-2xl w-fit">
+          <button 
+            onClick={() => setActiveSubTab('products')}
+            className={cn(
+              "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              activeSubTab === 'products' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            <Package className="w-3.5 h-3.5" />
+            Doces & Margens de Lucro
+          </button>
+          <button 
+            onClick={() => setActiveSubTab('ingredients')}
+            className={cn(
+              "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2",
+              activeSubTab === 'ingredients' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            <ChefHat className="w-3.5 h-3.5" />
+            Ingredientes Base ({ingredients.length})
+          </button>
+        </div>
+
+        {enablePredictiveStockAlerts && (
+          <button
+            type="button"
+            onClick={() => setIsPredictiveModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-brand-wine to-[#5a0016] text-brand-gold hover:text-white font-black text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 border border-brand-gold/30"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span>Alerta Preditivo & Reposição</span>
+          </button>
+        )}
       </div>
 
       {activeSubTab === 'products' ? (
@@ -798,6 +816,17 @@ export function AdminInventoryTab({
               })}
           </div>
         </div>
+      )}
+
+      {/* Predictive Stock & Replenishment Modal */}
+      {enablePredictiveStockAlerts && (
+        <AdminPredictiveStockModal
+          isOpen={isPredictiveModalOpen}
+          onClose={() => setIsPredictiveModalOpen(false)}
+          orders={orders}
+          ingredients={ingredients}
+          recipes={recipes}
+        />
       )}
     </div>
   );

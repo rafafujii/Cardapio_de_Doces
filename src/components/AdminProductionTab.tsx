@@ -14,26 +14,45 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  PackageCheck
+  PackageCheck,
+  CalendarDays,
+  ShoppingCart
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { exportKitchenProductionPdf } from '../lib/exportReports';
+import { AdminWeeklyPlanner } from './AdminWeeklyPlanner';
+import { AdminPredictiveStockModal } from './AdminPredictiveStockModal';
 import type { CategoryGroup, Product } from '../types';
 
 interface AdminProductionTabProps {
   orders: any[];
   catalog: CategoryGroup[];
   onUpdateStatus?: (id: string, status: string) => void;
+  enableProductionCalendar?: boolean;
+  enablePredictiveStockAlerts?: boolean;
+  ingredients?: any[];
+  recipes?: Record<string, any[]>;
 }
 
-export function AdminProductionTab({ orders, catalog, onUpdateStatus }: AdminProductionTabProps) {
+export function AdminProductionTab({ 
+  orders, 
+  catalog, 
+  onUpdateStatus,
+  enableProductionCalendar = true,
+  enablePredictiveStockAlerts = true,
+  ingredients = [],
+  recipes = {}
+}: AdminProductionTabProps) {
   const [selectedFilter, setSelectedFilter] = useState<'today' | 'tomorrow' | 'weekend' | 'week' | 'all' | 'custom'>('today');
   const [customDate, setCustomDate] = useState<string>(() => {
     return new Date().toISOString().slice(0, 10);
   });
   const [productionChecklist, setProductionChecklist] = useState<Record<string, boolean>>({});
-  const [activeViewMode, setActiveViewMode] = useState<'consolidated' | 'orders'>('consolidated');
+  const [activeViewMode, setActiveViewMode] = useState<'consolidated' | 'orders' | 'weekly_calendar'>(
+    'consolidated'
+  );
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
+  const [isPredictiveModalOpen, setIsPredictiveModalOpen] = useState(false);
 
   // Map of product images and categories from catalog
   const catalogProductMap = useMemo(() => {
@@ -308,32 +327,60 @@ export function AdminProductionTab({ orders, catalog, onUpdateStatus }: AdminPro
         </div>
       </div>
 
-      {/* Sub-view switcher: Consolidated vs By Order */}
-      <div className="flex gap-2 p-1 bg-neutral-100 rounded-2xl w-fit">
-        <button
-          onClick={() => setActiveViewMode('consolidated')}
-          className={cn(
-            "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-            activeViewMode === 'consolidated' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
+      {/* Sub-view switcher & Action Tools */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2 p-1 bg-neutral-100 rounded-2xl w-fit">
+          <button
+            onClick={() => setActiveViewMode('consolidated')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              activeViewMode === 'consolidated' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            Doces a Enrolar ({consolidatedItems.length} Sabores)
+          </button>
+          <button
+            onClick={() => setActiveViewMode('orders')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              activeViewMode === 'orders' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
+            )}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            Pedidos por Horário ({filteredOrders.length})
+          </button>
+          {enableProductionCalendar && (
+            <button
+              onClick={() => setActiveViewMode('weekly_calendar')}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+                activeViewMode === 'weekly_calendar' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
+              )}
+            >
+              <CalendarDays className="w-3.5 h-3.5 text-brand-gold" />
+              Planejador Semanal 🗓️
+            </button>
           )}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          Doces a Enrolar ({consolidatedItems.length} Sabores)
-        </button>
-        <button
-          onClick={() => setActiveViewMode('orders')}
-          className={cn(
-            "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-            activeViewMode === 'orders' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
-          )}
-        >
-          <Clock className="w-3.5 h-3.5" />
-          Pedidos por Horário ({filteredOrders.length})
-        </button>
+        </div>
+
+        {/* Predictive Stock & Replenishment Button */}
+        {enablePredictiveStockAlerts && (
+          <button
+            type="button"
+            onClick={() => setIsPredictiveModalOpen(true)}
+            className="px-4 py-2 bg-gradient-to-r from-brand-wine to-[#5a0016] text-brand-gold hover:text-white font-black text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 border border-brand-gold/30"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span>Alerta de Compras & Insumos</span>
+          </button>
+        )}
       </div>
 
       {/* Main Content Area */}
-      {filteredOrders.length === 0 ? (
+      {activeViewMode === 'weekly_calendar' && enableProductionCalendar ? (
+        <AdminWeeklyPlanner orders={orders} catalog={catalog} onUpdateStatus={onUpdateStatus} />
+      ) : filteredOrders.length === 0 ? (
         <div className="bg-white rounded-[32px] p-16 text-center border border-dashed border-neutral-200 space-y-3">
           <ChefHat className="w-12 h-12 text-neutral-300 mx-auto" />
           <h4 className="font-serif text-lg text-neutral-600 italic">Nenhuma encomenda para {getFilterLabel()}</h4>
@@ -568,6 +615,17 @@ export function AdminProductionTab({ orders, catalog, onUpdateStatus }: AdminPro
             );
           })}
         </div>
+      )}
+
+      {/* Predictive Stock & Shopping List Modal */}
+      {enablePredictiveStockAlerts && (
+        <AdminPredictiveStockModal
+          isOpen={isPredictiveModalOpen}
+          onClose={() => setIsPredictiveModalOpen(false)}
+          orders={orders}
+          ingredients={ingredients}
+          recipes={recipes}
+        />
       )}
     </div>
   );

@@ -113,6 +113,27 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       }
     },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Promotional discount coupons for marketing and customer loyalty",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "description": { "type": "string" },
+        "discountType": { "type": "string", "enum": ["percent", "fixed"] },
+        "discountValue": { "type": "number" },
+        "minOrderValue": { "type": "number" },
+        "maxDiscountAmount": { "type": "number" },
+        "usageLimit": { "type": "number" },
+        "usageCount": { "type": "number" },
+        "expirationDate": { "type": "string" },
+        "active": { "type": "boolean" },
+        "showBanner": { "type": "boolean" },
+        "bannerText": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "discountType", "discountValue", "active"]
+    },
     "GlobalSettings": {
       "title": "Global Settings",
       "description": "General site-wide configuration",
@@ -124,6 +145,20 @@
         "pickupAddress": { "type": "string" },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Administrative audit trail logs for changes in global settings",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "summary": { "type": "string" },
+        "changedFields": { "type": "array" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "userEmail", "timestamp"]
     }
   },
   "firestore": {
@@ -154,6 +189,14 @@
     "/customer_notes/{customerKey}": {
       "schema": "CustomerNote",
       "description": "Confectioner CRM notes and customer preferences"
+    },
+    "/coupons/{couponId}": {
+      "schema": "Coupon",
+      "description": "Promotional discount coupons"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Administrative audit trail logs for changes in global settings"
     },
     "/settings/global": {
       "schema": "GlobalSettings",

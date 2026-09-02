@@ -13,6 +13,9 @@ interface ProductDetailsModalProps {
   onUpdateQuantity: (id: number, quantity: number) => void;
   onRemoveFromCart: (id: number) => void;
   contactPhone: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  showWishlist?: boolean;
 }
 
 export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
@@ -22,7 +25,10 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   onAddToCart,
   onUpdateQuantity,
   onRemoveFromCart,
-  contactPhone
+  contactPhone,
+  isFavorite = false,
+  onToggleFavorite,
+  showWishlist = true
 }) => {
   const [reviews, setReviews] = useState<any[]>([]);
   const [rating, setRating] = useState(5);
@@ -116,14 +122,32 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
         exit={{ scale: 0.95, opacity: 0, y: 20 }}
         className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] z-10 border border-neutral-100"
       >
-        {/* Header Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-20 p-2.5 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all active:scale-95"
-          title="Fechar"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Header Action Buttons */}
+        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+          {showWishlist && onToggleFavorite && (
+            <button
+              type="button"
+              onClick={onToggleFavorite}
+              className={cn(
+                "p-2.5 rounded-full backdrop-blur-md transition-all active:scale-95 shadow-md flex items-center gap-1.5 text-xs font-bold",
+                isFavorite 
+                  ? "bg-rose-600 text-white" 
+                  : "bg-black/40 hover:bg-black/60 text-white"
+              )}
+              title={isFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
+            >
+              <Heart className={cn("w-5 h-5", isFavorite ? "fill-white text-white" : "text-white")} />
+            </button>
+          )}
+
+          <button
+            onClick={onClose}
+            className="p-2.5 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-all active:scale-95 shadow-md"
+            title="Fechar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
         {/* Scrollable Content */}
         <div className="overflow-y-auto flex-grow">
@@ -470,6 +494,14 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                         ))}
                       </div>
                       <p className="text-xs text-neutral-600 italic">"{r.comment}"</p>
+                      {r.adminReply && (
+                        <div className="mt-2 pl-3 border-l-2 border-brand-gold bg-amber-50/70 p-2.5 rounded-r-xl space-y-0.5">
+                          <span className="text-[10px] font-black uppercase text-brand-wine tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-brand-gold" /> Resposta da Confeitaria:
+                          </span>
+                          <p className="text-xs text-neutral-800 font-medium">{r.adminReply}</p>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

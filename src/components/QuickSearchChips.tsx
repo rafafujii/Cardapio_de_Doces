@@ -1,11 +1,15 @@
 import React from 'react';
-import { Search, X, Sparkles, Flame } from 'lucide-react';
+import { Search, X, Sparkles, Flame, Heart } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface QuickSearchChipsProps {
   searchTerm: string;
   onSearchChange: (term: string) => void;
   onSelectChip: (chip: string) => void;
+  favoritesCount?: number;
+  showWishlist?: boolean;
+  isWishlistOnly?: boolean;
+  onToggleWishlistFilter?: () => void;
 }
 
 const POPULAR_CHIPS = [
@@ -22,7 +26,11 @@ const POPULAR_CHIPS = [
 export const QuickSearchChips: React.FC<QuickSearchChipsProps> = ({
   searchTerm,
   onSearchChange,
-  onSelectChip
+  onSelectChip,
+  favoritesCount = 0,
+  showWishlist = true,
+  isWishlistOnly = false,
+  onToggleWishlistFilter
 }) => {
   return (
     <div className="space-y-3 mb-6">
@@ -47,13 +55,39 @@ export const QuickSearchChips: React.FC<QuickSearchChipsProps> = ({
         )}
       </div>
 
-      {/* Suggestion Chips */}
+      {/* Suggestion & Filter Chips */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         <span className="text-[11px] uppercase font-bold text-neutral-400 whitespace-nowrap pl-1">
-          Sugestões:
+          Filtros:
         </span>
+
+        {/* Favorite items filter button */}
+        {showWishlist && onToggleWishlistFilter && (
+          <button
+            type="button"
+            onClick={onToggleWishlistFilter}
+            className={cn(
+              "px-3.5 py-1.5 rounded-full text-xs font-black whitespace-nowrap transition-all border shrink-0 active:scale-95 flex items-center gap-1.5",
+              isWishlistOnly
+                ? "bg-rose-600 text-white border-rose-600 shadow-sm ring-2 ring-rose-200"
+                : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+            )}
+          >
+            <Heart className={cn("w-3.5 h-3.5", isWishlistOnly ? "fill-white text-white" : "fill-rose-500 text-rose-500")} />
+            <span>Favoritos</span>
+            {favoritesCount > 0 && (
+              <span className={cn(
+                "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                isWishlistOnly ? "bg-white text-rose-600" : "bg-rose-200 text-rose-800"
+              )}>
+                {favoritesCount}
+              </span>
+            )}
+          </button>
+        )}
+
         {POPULAR_CHIPS.map((chip) => {
-          const isActive = searchTerm.toLowerCase() === chip.value.toLowerCase();
+          const isActive = !isWishlistOnly && searchTerm.toLowerCase() === chip.value.toLowerCase();
           return (
             <button
               key={chip.value}
@@ -81,3 +115,4 @@ export const QuickSearchChips: React.FC<QuickSearchChipsProps> = ({
     </div>
   );
 };
+

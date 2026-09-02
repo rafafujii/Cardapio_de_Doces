@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, Minus, Star, MessageCircle, Package, Eye, Sparkles, Check, Trash2 } from 'lucide-react';
+import { Plus, Minus, Star, MessageCircle, Package, Eye, Sparkles, Check, Trash2, Heart } from 'lucide-react';
 import { cn, formatCurrency, getProductUnitPrice } from '../lib/utils';
 import type { Product, CartItem } from '../types';
 
@@ -12,6 +12,9 @@ interface ProductCardProps {
   onRemove: () => void;
   onViewDetails: () => void;
   contactPhone: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  showWishlist?: boolean;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -21,7 +24,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onUpdateQuantity,
   onRemove,
   onViewDetails,
-  contactPhone
+  contactPhone,
+  isFavorite = false,
+  onToggleFavorite,
+  showWishlist = true
 }) => {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -57,9 +63,29 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     >
       {/* Luxury Floating Pill Badge */}
       {item.badge && (
-        <div className="absolute top-3 left-3 z-20 max-w-[85%] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white text-[10px] sm:text-xs font-black tracking-wide shadow-lg shadow-red-950/30 border border-white/40 backdrop-blur-sm pointer-events-none select-none">
+        <div className="absolute top-3 left-3 z-20 max-w-[70%] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white text-[10px] sm:text-xs font-black tracking-wide shadow-lg shadow-red-950/30 border border-white/40 backdrop-blur-sm pointer-events-none select-none">
           <span className="truncate drop-shadow-sm">{item.badge.trim()}</span>
         </div>
+      )}
+
+      {/* Wishlist Heart Button */}
+      {showWishlist && onToggleFavorite && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          className={cn(
+            "absolute top-3 right-3 z-20 p-2 rounded-full backdrop-blur-md transition-all duration-200 shadow-md active:scale-90",
+            isFavorite 
+              ? "bg-rose-500 text-white shadow-rose-950/20 scale-105" 
+              : "bg-white/80 text-neutral-500 hover:text-rose-500 hover:bg-white"
+          )}
+          title={isFavorite ? "Remover dos favoritos" : "Salvar nos favoritos"}
+        >
+          <Heart className={cn("w-4 h-4 transition-transform", isFavorite ? "fill-white text-white scale-110" : "text-current")} />
+        </button>
       )}
 
       {/* Product Image Box */}

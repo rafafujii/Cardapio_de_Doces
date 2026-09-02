@@ -13,7 +13,8 @@ import {
   doc,
   onSnapshot,
   deleteDoc,
-  where
+  where,
+  limit
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -62,5 +63,6 @@ export {
   doc,
   onSnapshot,
   deleteDoc,
-  where
+  where,
+  limit
 };
