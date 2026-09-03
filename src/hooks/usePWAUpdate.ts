@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { registerSW } from 'virtual:pwa-register';
 
 export interface PWAUpdateState {
@@ -44,30 +44,39 @@ export async function forceHardResetApp(): Promise<void> {
   }
 }
 
-export function usePWAUpdate(): PWAUpdateState {
-  const [needRefresh, setNeedRefresh] = useState(false);
-  const [offlineReady, setOfflineReady] = useState(false);
-  const [isChecking, setIsChecking] = useState(false);
-  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+// Shared singleton store so multiple UI components share identical state
+let needRefreshShared = false;
+let offlineReadyShared = false;
+let isCheckingShared = false;
+let lastCheckedShared: Date | null = null;
+let updateSWInstance: ((reloadPage?: boolean) => Promise<void>) | null = null;
+let registrationInstance: ServiceWorkerRegistration | null = null;
+let isInitialized = false;
 
-  const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
-  const updateSWRef = useRef<((reloadPage?: boolean) => Promise<void>) | null>(null);
+const listeners = new Set<() => void>();
 
-  // Setup virtual:pwa-register
-  useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-      return;
-    }
+function notifyListeners() {
+  listeners.forEach((listener) => listener());
+}
 
+function initPWA() {
+  if (isInitialized || typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+  isInitialized = true;
+
+  try {
     const updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {
-        console.log('[PWA] Nova versão detectada! Forçando ativação e recarregamento dos arquivos mais recentes...');
-        setNeedRefresh(true);
+        console.log('[PWA] Nova versão detectada! Forçando ativação e recarregamento...');
+        needRefreshShared = true;
+        notifyListeners();
+
         // Força a ativação imediata do novo Service Worker e reload da página
         try {
-          if (updateSWRef.current) {
-            updateSWRef.current(true).catch(() => {
+          if (updateSWInstance) {
+            updateSWInstance(true).catch(() => {
               window.location.reload();
             });
           } else {
@@ -78,17 +87,19 @@ export function usePWAUpdate(): PWAUpdateState {
         }
       },
       onOfflineReady() {
-        console.log('[PWA] App está em cache e pronto para uso offline.');
-        setOfflineReady(true);
+        console.log('[PWA] App em cache e pronto para uso offline.');
+        offlineReadyShared = true;
+        notifyListeners();
       },
       onRegistered(r) {
         if (r) {
-          registrationRef.current = r;
-          setLastChecked(new Date());
+          registrationInstance = r;
+          lastCheckedShared = new Date();
+          notifyListeners();
 
           // Se já houver um worker esperando, força o skipWaiting
           if (r.waiting) {
-            console.log('[PWA] Worker em espera detectado na inicialização. Forçando ativação...');
+            console.log('[PWA] Worker em espera detectado. Forçando ativação...');
             r.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
 
@@ -101,18 +112,17 @@ export function usePWAUpdate(): PWAUpdateState {
       }
     });
 
-    updateSWRef.current = updateSW;
+    updateSWInstance = updateSW;
 
-    // Listen for controller changes (quando o novo SW assume controle com skipWaiting + clientsClaim)
+    // Listen for controller changes (quando o novo SW assume controle)
     let refreshing = false;
     const handleControllerChange = () => {
       if (refreshing) return;
       refreshing = true;
-      console.log('[PWA] Novo Service Worker ativo. Forçando reload para carregar os arquivos mais recentes...');
-      
+      console.log('[PWA] Novo Service Worker ativo. Recarregando para aplicar atualizações...');
+
       const lastReload = sessionStorage.getItem('pwa_auto_reload_timestamp');
       const now = Date.now();
-      // Previne loops com margem segura de 5 segundos
       if (!lastReload || now - parseInt(lastReload, 10) > 5000) {
         sessionStorage.setItem('pwa_auto_reload_timestamp', now.toString());
         window.location.reload();
@@ -121,11 +131,12 @@ export function usePWAUpdate(): PWAUpdateState {
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
 
-    // Event listeners to check for updates whenever the user returns to the installed app
+    // Checagem silenciosa periódica e ao focar a janela
     const checkUpdateSilently = () => {
-      if (navigator.onLine && registrationRef.current) {
-        setLastChecked(new Date());
-        registrationRef.current.update().catch((err) => {
+      if (navigator.onLine && registrationInstance) {
+        lastCheckedShared = new Date();
+        notifyListeners();
+        registrationInstance.update().catch((err) => {
           console.debug('[PWA] Background update check:', err);
         });
       }
@@ -137,34 +148,33 @@ export function usePWAUpdate(): PWAUpdateState {
       }
     };
 
-    const handleFocus = () => {
-      checkUpdateSilently();
-    };
-
-    const handleOnline = () => {
-      checkUpdateSilently();
-    };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('online', handleOnline);
+    window.addEventListener('focus', checkUpdateSilently);
+    window.addEventListener('online', checkUpdateSilently);
 
-    // Periodic check every 60 seconds while open
-    const intervalId = setInterval(checkUpdateSilently, 60 * 1000);
+    // Checagem a cada 60 segundos com o app aberto
+    setInterval(checkUpdateSilently, 60 * 1000);
+  } catch (err) {
+    console.warn('[PWA] Falha ao inicializar o registro do Service Worker:', err);
+  }
+}
 
+export function usePWAUpdate(): PWAUpdateState {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    initPWA();
+    const listener = () => setTick((t) => t + 1);
+    listeners.add(listener);
     return () => {
-      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('online', handleOnline);
-      clearInterval(intervalId);
+      listeners.delete(listener);
     };
   }, []);
 
   const updateApp = useCallback(async () => {
     try {
-      if (updateSWRef.current) {
-        await updateSWRef.current(true);
+      if (updateSWInstance) {
+        await updateSWInstance(true);
       } else {
         window.location.reload();
       }
@@ -175,18 +185,20 @@ export function usePWAUpdate(): PWAUpdateState {
   }, []);
 
   const checkForUpdate = useCallback(async (): Promise<boolean> => {
-    setIsChecking(true);
-    setLastChecked(new Date());
+    isCheckingShared = true;
+    lastCheckedShared = new Date();
+    notifyListeners();
+
     try {
       if ('serviceWorker' in navigator) {
-        const registration = registrationRef.current || await navigator.serviceWorker.getRegistration();
+        const registration = registrationInstance || await navigator.serviceWorker.getRegistration();
         if (registration) {
-          registrationRef.current = registration;
+          registrationInstance = registration;
           await registration.update();
-          
-          // If a waiting worker exists or installation started
+
           if (registration.waiting || registration.installing) {
-            setNeedRefresh(true);
+            needRefreshShared = true;
+            notifyListeners();
             return true;
           }
         }
@@ -196,19 +208,21 @@ export function usePWAUpdate(): PWAUpdateState {
       console.warn('[PWA] Manual update check error:', err);
       return false;
     } finally {
-      setIsChecking(false);
+      isCheckingShared = false;
+      notifyListeners();
     }
   }, []);
 
   const dismissUpdate = useCallback(() => {
-    setNeedRefresh(false);
+    needRefreshShared = false;
+    notifyListeners();
   }, []);
 
   return {
-    needRefresh,
-    offlineReady,
-    isChecking,
-    lastChecked,
+    needRefresh: needRefreshShared,
+    offlineReady: offlineReadyShared,
+    isChecking: isCheckingShared,
+    lastChecked: lastCheckedShared,
     updateApp,
     checkForUpdate,
     forceHardReset: forceHardResetApp,
