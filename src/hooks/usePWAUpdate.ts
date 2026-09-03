@@ -62,17 +62,35 @@ export function usePWAUpdate(): PWAUpdateState {
     const updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {
-        console.log('[PWA] New version detected and ready to activate.');
+        console.log('[PWA] Nova versão detectada! Forçando ativação e recarregamento dos arquivos mais recentes...');
         setNeedRefresh(true);
+        // Força a ativação imediata do novo Service Worker e reload da página
+        try {
+          if (updateSWRef.current) {
+            updateSWRef.current(true).catch(() => {
+              window.location.reload();
+            });
+          } else {
+            window.location.reload();
+          }
+        } catch {
+          window.location.reload();
+        }
       },
       onOfflineReady() {
-        console.log('[PWA] App is cached and ready for offline use.');
+        console.log('[PWA] App está em cache e pronto para uso offline.');
         setOfflineReady(true);
       },
       onRegistered(r) {
         if (r) {
           registrationRef.current = r;
           setLastChecked(new Date());
+
+          // Se já houver um worker esperando, força o skipWaiting
+          if (r.waiting) {
+            console.log('[PWA] Worker em espera detectado na inicialização. Forçando ativação...');
+            r.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
 
           // Trigger an immediate check on startup
           r.update().catch(() => {});
@@ -85,12 +103,20 @@ export function usePWAUpdate(): PWAUpdateState {
 
     updateSWRef.current = updateSW;
 
-    // Listen for controller changes (e.g., when skipWaiting causes a new SW to take control)
+    // Listen for controller changes (quando o novo SW assume controle com skipWaiting + clientsClaim)
     let refreshing = false;
     const handleControllerChange = () => {
       if (refreshing) return;
-      console.log('[PWA] New service worker took control.');
-      setNeedRefresh(true);
+      refreshing = true;
+      console.log('[PWA] Novo Service Worker ativo. Forçando reload para carregar os arquivos mais recentes...');
+      
+      const lastReload = sessionStorage.getItem('pwa_auto_reload_timestamp');
+      const now = Date.now();
+      // Previne loops com margem segura de 5 segundos
+      if (!lastReload || now - parseInt(lastReload, 10) > 5000) {
+        sessionStorage.setItem('pwa_auto_reload_timestamp', now.toString());
+        window.location.reload();
+      }
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
@@ -123,8 +149,8 @@ export function usePWAUpdate(): PWAUpdateState {
     window.addEventListener('focus', handleFocus);
     window.addEventListener('online', handleOnline);
 
-    // Periodic check every 5 minutes while open
-    const intervalId = setInterval(checkUpdateSilently, 5 * 60 * 1000);
+    // Periodic check every 60 seconds while open
+    const intervalId = setInterval(checkUpdateSilently, 60 * 1000);
 
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
