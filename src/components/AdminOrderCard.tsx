@@ -15,7 +15,8 @@ import {
   AlertTriangle,
   Phone,
   ChefHat,
-  BellRing
+  BellRing,
+  ClipboardPen
 } from 'lucide-react';
 import { Timestamp } from '../firebase';
 import { cn, formatCurrency } from '../lib/utils';
@@ -211,6 +212,12 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
               {order.status === 'ready' && <span className="text-[10px] font-black px-2.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 font-bold flex items-center gap-1"><Sparkles className="w-3 h-3 text-emerald-600" /> PRONTO!</span>}
               {order.status === 'completed' && <span className="text-[10px] font-black px-2 py-0.5 bg-neutral-100 text-neutral-500 rounded-full border border-neutral-200">ENTREGUE</span>}
               {order.status === 'deleted' && <span className="text-[10px] font-black px-2 py-0.5 bg-red-100 text-red-600 rounded-full border border-red-200">EXCLUÍDO</span>}
+              {Boolean(order.isManualOrder || order.origin) && (
+                <span className="text-[10px] font-black px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full flex items-center gap-1" title="Pedido lançado manualmente (fora do cardápio)">
+                  <ClipboardPen className="w-3 h-3 text-indigo-600" />
+                  {order.origin ? order.origin.toUpperCase() : 'MANUAL'}
+                </span>
+              )}
             </div>
           </div>
           <p className="text-[10px] text-neutral-400 font-medium">#{order.id.slice(-6).toUpperCase()} {order.deletedAt && `• Excluído em: ${order.deletedAt.toDate().toLocaleDateString('pt-BR')}`}</p>

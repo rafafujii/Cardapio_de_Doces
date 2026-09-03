@@ -62,7 +62,8 @@ import {
   Moon,
   Sun,
   Heart,
-  Send
+  Send,
+  ClipboardPen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn, formatCurrency, removeAcentos, getProductUnitPrice, cleanFirestoreData } from './lib/utils';
@@ -87,13 +88,13 @@ import {
   orderBy, 
   query, 
   serverTimestamp, 
-  Timestamp,
-  updateDoc,
-  doc,
-  onSnapshot,
-  deleteDoc,
-  where,
-  limit
+  Timestamp, 
+  updateDoc, 
+  doc, 
+  onSnapshot, 
+  deleteDoc, 
+  where, 
+  limit 
 } from './firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { DEFAULT_CATALOG, fetchCatalogWithFallback } from './defaultCatalog';
@@ -127,6 +128,7 @@ import { AdminCouponsTab } from './components/AdminCouponsTab';
 import { CouponBanner } from './components/CouponBanner';
 import { CustomerReviewModal } from './components/CustomerReviewModal';
 import { AdminPendingRemindersModal } from './components/AdminPendingRemindersModal';
+import { AdminManualOrderModal } from './components/AdminManualOrderModal';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { useAutoReminders } from './hooks/useAutoReminders';
 import { DEFAULT_48H_REMINDER_TEMPLATE, isOrderPendingOver48h } from './lib/reminderHelper';
@@ -1177,6 +1179,60 @@ export function App() {
     setIsCartOpen(false);
   };
 
+  // Handler to create a manual order from Admin View (phone, walk-in, whatsapp)
+  const handleCreateManualOrder = async (orderData: any): Promise<string> => {
+    try {
+      const docRef = await addDoc(collection(db, 'orders'), {
+        customerName: orderData.customerName,
+        customerPhone: orderData.customerPhone || '',
+        phone: orderData.customerPhone || '',
+        date: orderData.date,
+        time: orderData.time,
+        items: orderData.items,
+        subtotal: orderData.subtotal,
+        discountAmount: orderData.discountAmount || 0,
+        couponCode: null,
+        couponDiscount: 0,
+        deliveryFee: orderData.deliveryFee || 0,
+        deliveryType: orderData.deliveryType || 'pickup',
+        deliveryAddress: orderData.deliveryAddress || '',
+        total: orderData.total,
+        paymentMethod: orderData.paymentMethod,
+        paymentStatus: orderData.paymentStatus || 'pending',
+        changeAmount: orderData.changeAmount || '',
+        notes: orderData.notes || '',
+        createdAt: serverTimestamp(),
+        status: orderData.status || 'pending',
+        origin: orderData.origin || 'WhatsApp',
+        isManualOrder: true
+      });
+
+      // Save order id to local state tracking list as well
+      const existingIds = JSON.parse(localStorage.getItem('myOrderIds') || '[]');
+      localStorage.setItem('myOrderIds', JSON.stringify([docRef.id, ...existingIds]));
+
+      // Log in audit logs for traceability
+      try {
+        await addDoc(collection(db, 'audit_logs'), {
+          action: 'manual_order_created',
+          userEmail: user?.email || 'admin@sedoces.com',
+          userName: user?.displayName || 'Administrador',
+          category: 'Vendas & Pedidos',
+          summary: `Pedido manual #${docRef.id.slice(-6).toUpperCase()} para ${orderData.customerName} (${orderData.origin})`,
+          detailedDescription: `Novo pedido de ${formatCurrency(orderData.total)} cadastrado diretamente pelo administrador para o cliente ${orderData.customerName} (${orderData.customerPhone || 'Sem telefone'}). Origem: ${orderData.origin}.`,
+          timestamp: serverTimestamp()
+        });
+      } catch (auditErr) {
+        console.warn("Audit log write skipped:", auditErr);
+      }
+
+      return docRef.id;
+    } catch (err) {
+      console.error("Error creating manual order:", err);
+      throw err;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-brand-cream text-brand-wine">
@@ -1545,6 +1601,7 @@ export function App() {
               onClearAuditLogs={clearAllAuditLogs}
               adminDarkMode={adminDarkMode}
               onToggleAdminDarkMode={handleToggleAdminDarkMode}
+              onCreateManualOrder={handleCreateManualOrder}
             />
           </div>
         ) : (
@@ -1792,7 +1849,8 @@ function AdminView({
   onDeleteAuditLog,
   onClearAuditLogs,
   adminDarkMode = false,
-  onToggleAdminDarkMode
+  onToggleAdminDarkMode,
+  onCreateManualOrder
 }: { 
   orders: any[], 
   loading: boolean, 
@@ -1827,12 +1885,14 @@ function AdminView({
   onDeleteAuditLog?: (id: string) => void,
   onClearAuditLogs?: () => void,
   adminDarkMode?: boolean,
-  onToggleAdminDarkMode?: () => void
+  onToggleAdminDarkMode?: () => void,
+  onCreateManualOrder?: (orderData: any) => Promise<string | null>
 }) {
   const [periodFilter, setPeriodFilter] = useState<'all' | 'week' | 'month' | 'year' | 'trash'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'>('all');
   const [filterOverduePendingOnly, setFilterOverduePendingOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<'orders' | 'production' | 'ready_boxes' | 'calculator' | 'crm' | 'coupons' | 'inventory' | 'quick_replies' | 'reviews' | 'settings'>('orders');
+  const [isManualOrderModalOpen, setIsManualOrderModalOpen] = useState(false);
 
   // Order status counts for fast filtering
   const statusCounts = useMemo(() => {
@@ -2492,6 +2552,16 @@ function AdminView({
               <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => setIsManualOrderModalOpen(true)}
+                  className="flex-1 sm:flex-initial px-4 py-2 bg-gradient-to-r from-brand-wine via-[#7a001e] to-rose-900 hover:from-black hover:to-brand-wine text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md hover:shadow-lg transition-all min-h-[38px] active:scale-95 border border-brand-gold/40 cursor-pointer"
+                  title="Cadastrar pedido manual recebido por WhatsApp, balcão ou telefone"
+                >
+                  <ClipboardPen className="w-3.5 h-3.5 text-brand-gold" />
+                  <span>+ Lançar Pedido</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => exportSalesToCsv({
                     orders: filteredOrders,
                     productCosts,
@@ -2555,6 +2625,32 @@ function AdminView({
           )}
 
           {periodFilter !== 'trash' && <AdminCharts orders={orders} productCosts={productCosts} ingredients={ingredients} recipes={recipes} />}
+
+          {/* Banner de Pedido Manual (WhatsApp / Balcão) */}
+          <div className="p-4 bg-gradient-to-r from-brand-wine/10 via-amber-500/10 to-brand-wine/10 border border-brand-wine/20 dark:border-brand-gold/30 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3 text-left">
+              <div className="p-2.5 bg-brand-wine text-brand-gold rounded-xl shrink-0 shadow-2xs">
+                <ClipboardPen className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-neutral-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                  <span>Recebeu pedido pelo WhatsApp ou no balcão?</span>
+                  <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-brand-gold text-brand-wine rounded-full">Novo</span>
+                </h4>
+                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                  Cadastre pedidos de clientes que não usaram o cardápio para atualizar a esteira de produção, estoque e CRM automaticamente.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsManualOrderModalOpen(true)}
+              className="w-full sm:w-auto px-4 py-2 bg-brand-wine hover:bg-black text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all shrink-0 cursor-pointer active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Lançar Pedido Manual</span>
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 gap-6">
             {filteredOrders.length === 0 ? (
@@ -2681,6 +2777,17 @@ function AdminView({
           onToggleAdminDarkMode={onToggleAdminDarkMode}
         />
       )}
+
+      {/* Modal de Cadastro de Pedido Manual (WhatsApp / Balcão) */}
+      <AdminManualOrderModal
+        isOpen={isManualOrderModalOpen}
+        onClose={() => setIsManualOrderModalOpen(false)}
+        catalog={catalog}
+        readyBoxes={readyBoxes}
+        pastOrders={orders}
+        globalSettings={globalSettings}
+        onSubmitManualOrder={onCreateManualOrder || (async () => null)}
+      />
 
       {/* Modal de Agendamento & Disparo de Lembretes Automáticos (> 48h) */}
       <AdminPendingRemindersModal
