@@ -16,18 +16,22 @@ import {
   ChevronUp,
   PackageCheck,
   CalendarDays,
-  ShoppingCart
+  ShoppingCart,
+  CheckSquare,
+  Square,
+  Maximize2
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { exportKitchenProductionPdf } from '../lib/exportReports';
 import { AdminWeeklyPlanner } from './AdminWeeklyPlanner';
 import { AdminPredictiveStockModal } from './AdminPredictiveStockModal';
+import { AdminReadyStatusModal } from './AdminReadyStatusModal';
 import type { CategoryGroup, Product } from '../types';
 
 interface AdminProductionTabProps {
   orders: any[];
   catalog: CategoryGroup[];
-  onUpdateStatus?: (id: string, status: string) => void;
+  onUpdateStatus?: (id: string, status: string, customMessage?: string, notifyPwa?: boolean) => void;
   enableProductionCalendar?: boolean;
   enablePredictiveStockAlerts?: boolean;
   ingredients?: any[];
@@ -48,11 +52,50 @@ export function AdminProductionTab({
     return new Date().toISOString().slice(0, 10);
   });
   const [productionChecklist, setProductionChecklist] = useState<Record<string, boolean>>({});
-  const [activeViewMode, setActiveViewMode] = useState<'consolidated' | 'orders' | 'weekly_calendar'>(
+  const [activeViewMode, setActiveViewMode] = useState<'consolidated' | 'orders' | 'weekly_calendar' | 'kds'>(
     'consolidated'
   );
+  const [kdsViewType, setKdsViewType] = useState<'orders' | 'flavors'>('orders');
+  const [kdsCheckedItems, setKdsCheckedItems] = useState<Record<string, boolean>>({});
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [isPredictiveModalOpen, setIsPredictiveModalOpen] = useState(false);
+  const [selectedOrderForReadyModal, setSelectedOrderForReadyModal] = useState<any | null>(null);
+
+  const playKitchenChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    } catch {
+      // Ignored if browser audio restricted
+    }
+  };
+
+  const toggleKdsItem = (key: string) => {
+    playKitchenChime();
+    setKdsCheckedItems(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const toggleChecklistItem = (sweetName: string) => {
+    setProductionChecklist(prev => ({
+      ...prev,
+      [sweetName]: !prev[sweetName]
+    }));
+  };
 
   // Map of product images and categories from catalog
   const catalogProductMap = useMemo(() => {
@@ -329,11 +372,12 @@ export function AdminProductionTab({
 
       {/* Sub-view switcher & Action Tools */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2 p-1 bg-neutral-100 rounded-2xl w-fit">
+        <div className="flex items-center overflow-x-auto no-scrollbar gap-1.5 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-2xl max-w-full touch-pan-x">
           <button
+            type="button"
             onClick={() => setActiveViewMode('consolidated')}
             className={cn(
-              "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[38px] active:scale-95",
               activeViewMode === 'consolidated' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
             )}
           >
@@ -341,20 +385,35 @@ export function AdminProductionTab({
             Doces a Enrolar ({consolidatedItems.length} Sabores)
           </button>
           <button
+            type="button"
             onClick={() => setActiveViewMode('orders')}
             className={cn(
-              "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[38px] active:scale-95",
               activeViewMode === 'orders' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
             )}
           >
             <Clock className="w-3.5 h-3.5" />
             Pedidos por Horário ({filteredOrders.length})
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveViewMode('kds')}
+            className={cn(
+              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[38px] active:scale-95",
+              activeViewMode === 'kds' 
+                ? "bg-gradient-to-r from-amber-600 to-amber-500 text-white shadow-sm" 
+                : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
+            )}
+          >
+            <ChefHat className="w-3.5 h-3.5 text-amber-400" />
+            Modo Bancada KDS 📱
+          </button>
           {enableProductionCalendar && (
             <button
+              type="button"
               onClick={() => setActiveViewMode('weekly_calendar')}
               className={cn(
-                "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[38px] active:scale-95",
                 activeViewMode === 'weekly_calendar' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-700"
               )}
             >
@@ -491,6 +550,303 @@ export function AdminProductionTab({
             );
           })}
         </div>
+      ) : activeViewMode === 'kds' ? (
+        /* KITCHEN DISPLAY SYSTEM (KDS) BANCADA */
+        <div className="space-y-4">
+          {/* KDS Header Controls */}
+          <div className="bg-neutral-950 text-white rounded-[28px] p-4 sm:p-6 border border-neutral-800 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <ChefHat className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    Bancada de Cozinha (KDS)
+                    <span className="text-[10px] uppercase tracking-wider font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Modo Produção
+                    </span>
+                  </h3>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Visor de alto contraste com alvos de toque ampliados e confirmação com bipe sonoro.
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle KDS View Mode */}
+              <div className="flex items-center gap-1.5 p-1 bg-neutral-900 rounded-xl border border-neutral-800 w-full sm:w-auto justify-center">
+                <button
+                  type="button"
+                  onClick={() => setKdsViewType('orders')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all flex items-center gap-1.5 min-h-[36px]",
+                    kdsViewType === 'orders' 
+                      ? "bg-amber-500 text-neutral-950 shadow-sm font-black" 
+                      : "text-neutral-400 hover:text-white"
+                  )}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Comandas por Horário
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setKdsViewType('flavors')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all flex items-center gap-1.5 min-h-[36px]",
+                    kdsViewType === 'flavors' 
+                      ? "bg-amber-500 text-neutral-950 shadow-sm font-black" 
+                      : "text-neutral-400 hover:text-white"
+                  )}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  Sabores Totais
+                </button>
+              </div>
+            </div>
+
+            {/* Live Progress Bar */}
+            {(() => {
+              const checkedItemsCount = Object.keys(kdsCheckedItems).filter(k => kdsCheckedItems[k]).length;
+              const totalItemsToAssemble = filteredOrders.reduce((sum, o) => sum + (o.items || []).length, 0);
+              const progressPercent = totalItemsToAssemble > 0 
+                ? Math.min(100, Math.round((checkedItemsCount / totalItemsToAssemble) * 100)) 
+                : 0;
+
+              return (
+                <div className="pt-2 border-t border-neutral-800/80 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-400 font-medium">
+                      Progresso de Montagem: <strong className="text-white">{checkedItemsCount}</strong> de <strong className="text-white">{totalItemsToAssemble}</strong> itens marcados
+                    </span>
+                    <span className="font-mono font-bold text-amber-400">{progressPercent}% Concluído</span>
+                  </div>
+                  <div className="w-full h-2.5 bg-neutral-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-300 rounded-full"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* KDS Content */}
+          {kdsViewType === 'orders' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredOrders.map(order => {
+                const isReady = order.status === 'ready';
+                const isCompleted = order.status === 'completed';
+                const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
+
+                return (
+                  <div 
+                    key={order.id}
+                    className={cn(
+                      "rounded-3xl border-2 transition-all p-5 flex flex-col justify-between space-y-4 shadow-sm",
+                      isCompleted ? "bg-neutral-100 border-neutral-200 opacity-60" :
+                      isReady ? "bg-emerald-50/50 border-emerald-400 ring-2 ring-emerald-400/20" :
+                      "bg-white border-neutral-200 hover:border-amber-400 shadow-md"
+                    )}
+                  >
+                    <div>
+                      {/* Card Header with Big Time */}
+                      <div className="flex items-center justify-between gap-2 pb-3 border-b border-neutral-100">
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "px-3 py-1.5 rounded-2xl font-black text-sm flex items-center gap-1.5 shadow-sm",
+                            isReady ? "bg-emerald-500 text-white" : "bg-neutral-900 text-amber-400"
+                          )}>
+                            <Clock className="w-4 h-4" />
+                            <span>{order.time || 'Sem hora'}</span>
+                          </div>
+                          <span className="text-xs font-mono font-bold text-neutral-400">
+                            #{order.id.slice(-5).toUpperCase()}
+                          </span>
+                        </div>
+
+                        <span className={cn(
+                          "text-[10px] font-black uppercase px-2.5 py-1 rounded-full",
+                          isCompleted ? "bg-neutral-200 text-neutral-600" :
+                          isReady ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                        )}>
+                          {isCompleted ? 'Entregue' : isReady ? 'Pronto' : 'Na Fila'}
+                        </span>
+                      </div>
+
+                      {/* Customer Name */}
+                      <div className="py-2.5 flex items-center justify-between">
+                        <h4 className="font-serif font-black text-lg text-brand-wine italic truncate">
+                          {order.customerName || 'Cliente Sem Nome'}
+                        </h4>
+                        {cleanPhone && (
+                          <a
+                            href={`https://wa.me/55${cleanPhone}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-all"
+                            title="Abrir WhatsApp"
+                          >
+                            <Phone className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Items checklist */}
+                      <div className="space-y-2 mt-1">
+                        {(order.items || []).map((item: any, idx: number) => {
+                          const itemKey = `${order.id}_${idx}`;
+                          const isItemChecked = kdsCheckedItems[itemKey] || false;
+
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => toggleKdsItem(itemKey)}
+                              className={cn(
+                                "w-full p-3 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all min-h-[50px] active:scale-[0.98] select-none",
+                                isItemChecked 
+                                  ? "bg-emerald-50 border-emerald-300 text-emerald-900" 
+                                  : "bg-neutral-50 hover:bg-amber-50/60 border-neutral-200 text-neutral-800"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {isItemChecked ? (
+                                  <CheckSquare className="w-5 h-5 text-emerald-600 shrink-0" />
+                                ) : (
+                                  <Square className="w-5 h-5 text-neutral-400 shrink-0" />
+                                )}
+                                <span className={cn(
+                                  "font-medium text-xs sm:text-sm truncate",
+                                  isItemChecked && "line-through text-neutral-400"
+                                )}>
+                                  {item.name}
+                                </span>
+                              </div>
+                              <span className={cn(
+                                "px-2.5 py-1 rounded-xl text-xs font-black shrink-0",
+                                isItemChecked ? "bg-emerald-200 text-emerald-900" : "bg-brand-wine text-white"
+                              )}>
+                                {item.quantity} un
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Notes alert */}
+                      {order.notes && (
+                        <div className="mt-3 p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 font-medium">
+                          <strong className="text-amber-950 font-bold block mb-0.5">⚠️ Observação da Comanda:</strong>
+                          {order.notes}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Button */}
+                    {onUpdateStatus && !isCompleted && (
+                      <div className="pt-2">
+                        {order.status !== 'ready' ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playKitchenChime();
+                              onUpdateStatus(order.id, 'ready');
+                            }}
+                            className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 min-h-[48px] active:scale-95"
+                          >
+                            <PackageCheck className="w-4 h-4" />
+                            Marcar Pedido Pronto
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onUpdateStatus(order.id, 'completed')}
+                            className="w-full py-3.5 px-4 bg-brand-wine hover:bg-neutral-900 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-md shadow-brand-wine/20 flex items-center justify-center gap-2 min-h-[48px] active:scale-95"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Finalizar Entrega
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Flavors Grid in KDS */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {consolidatedItems.map((item) => {
+                const isFlavorDone = productionChecklist[item.name] || false;
+                const centos = Math.floor(item.totalQuantity / 100);
+                const remaining = item.totalQuantity % 100;
+
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => {
+                      playKitchenChime();
+                      toggleChecklistItem(item.name);
+                    }}
+                    className={cn(
+                      "p-5 rounded-3xl border-2 text-left transition-all flex flex-col justify-between space-y-4 min-h-[140px] active:scale-[0.98] select-none shadow-sm",
+                      isFlavorDone 
+                        ? "bg-emerald-50/60 border-emerald-400 opacity-70" 
+                        : "bg-white border-neutral-200 hover:border-amber-400 shadow-md"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3 w-full">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 mb-1 inline-block">
+                          {item.category || 'Gourmet'}
+                        </span>
+                        <h4 className={cn(
+                          "font-serif font-black text-base sm:text-lg italic leading-snug",
+                          isFlavorDone ? "line-through text-neutral-400" : "text-brand-wine"
+                        )}>
+                          {item.name}
+                        </h4>
+                        <p className="text-xs text-neutral-500 mt-1">
+                          Em <strong>{item.orderCount}</strong> {item.orderCount === 1 ? 'pedido' : 'pedidos'}
+                        </p>
+                      </div>
+
+                      <div className={cn(
+                        "w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all",
+                        isFlavorDone 
+                          ? "bg-emerald-500 border-emerald-500 text-white" 
+                          : "border-neutral-300 text-transparent"
+                      )}>
+                        <Check className="w-5 h-5 stroke-[3]" />
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-neutral-100 flex items-center justify-between w-full">
+                      <span className="text-xs font-medium text-neutral-400">
+                        {isFlavorDone ? 'Massa Enrolada ✓' : 'A Enrolar:'}
+                      </span>
+                      <div className="text-right">
+                        <span className={cn(
+                          "text-xl sm:text-2xl font-black",
+                          isFlavorDone ? "text-neutral-400" : "text-brand-wine"
+                        )}>
+                          {item.totalQuantity} <span className="text-xs font-bold">un</span>
+                        </span>
+                        {centos > 0 && (
+                          <span className="block text-[10px] font-bold text-neutral-400">
+                            {centos} cento{centos > 1 ? 's' : ''} {remaining > 0 ? `+ ${remaining} un` : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       ) : (
         /* ORDERS LIST GROUPED BY TIME */
         <div className="space-y-4">
@@ -590,18 +946,19 @@ export function AdminProductionTab({
                         {order.status !== 'ready' && (
                           <button
                             type="button"
-                            onClick={() => onUpdateStatus(order.id, 'ready')}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center gap-1"
+                            onClick={() => setSelectedOrderForReadyModal(order)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
+                            title="Marcar como Pronto e enviar Notificação PWA Customizada ao Cliente"
                           >
                             <PackageCheck className="w-3.5 h-3.5" />
-                            Marcar como Pronto
+                            Marcar como Pronto & Notificar
                           </button>
                         )}
                         {order.status !== 'completed' && (
                           <button
                             type="button"
                             onClick={() => onUpdateStatus(order.id, 'completed')}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center gap-1"
+                            className="px-3 py-1.5 bg-neutral-800 hover:bg-black text-white font-bold text-xs rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             Concluir Pedido
@@ -625,6 +982,20 @@ export function AdminProductionTab({
           orders={orders}
           ingredients={ingredients}
           recipes={recipes}
+        />
+      )}
+
+      {/* Admin Ready Status Modal with Custom PWA Notification */}
+      {selectedOrderForReadyModal && (
+        <AdminReadyStatusModal
+          isOpen={!!selectedOrderForReadyModal}
+          onClose={() => setSelectedOrderForReadyModal(null)}
+          order={selectedOrderForReadyModal}
+          onConfirm={(orderId, status, customMessage, notifyPwa) => {
+            if (onUpdateStatus) {
+              onUpdateStatus(orderId, status, customMessage, notifyPwa);
+            }
+          }}
         />
       )}
     </div>

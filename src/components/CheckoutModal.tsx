@@ -20,13 +20,15 @@ import {
   Bike,
   Store,
   Tag,
-  Gift
+  Gift,
+  Phone
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn, formatCurrency, getProductUnitPrice } from '../lib/utils';
 import { generateOrderPdf } from '../lib/pdfGenerator';
 import type { CartItem, OrderDetails, Coupon } from '../types';
 import { validateCoupon } from '../lib/couponHelper';
+import { buildWhatsAppMessage } from '../lib/whatsappHelper';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -92,6 +94,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const [details, setDetails] = useState<OrderDetails>({
     name: localStorage.getItem('docesGourmetName') || '',
+    phone: localStorage.getItem('docesGourmetPhone') || '',
     date: minAllowedDate,
     time: '14:00',
     paymentMethod: 'Pix',
@@ -103,8 +106,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     discountAmount: 0
   });
 
-  const [errors, setErrors] = useState<{ name?: string; date?: string; time?: string; deliveryAddress?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; phone?: string; date?: string; time?: string; deliveryAddress?: string }>({});
   const [copiedPix, setCopiedPix] = useState(false);
+  const [copiedMessageOnly, setCopiedMessageOnly] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutCouponInput, setCheckoutCouponInput] = useState('');
   const [checkoutCouponFeedback, setCheckoutCouponFeedback] = useState<{ msg: string; isError: boolean } | null>(null);
@@ -200,10 +204,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   };
 
   const handleValidationAndSend = () => {
-    const newErrors: { name?: string; date?: string; time?: string; deliveryAddress?: string } = {};
+    const newErrors: { name?: string; phone?: string; date?: string; time?: string; deliveryAddress?: string } = {};
 
     if (!details.name.trim()) {
       newErrors.name = 'Por favor, informe seu nome completo.';
+    }
+
+    if (!details.phone?.trim()) {
+      newErrors.phone = 'Informe seu telefone/WhatsApp para atualizações do pedido.';
+    } else {
+      const cleanPhone = details.phone.replace(/\D/g, '');
+      if (cleanPhone.length < 10) {
+        newErrors.phone = 'Telefone inválido (insira DDD + número, ex: 11 99999-9999).';
+      }
     }
 
     if (details.deliveryType === 'delivery' && deliveryMode === 'delivery_and_pickup') {
@@ -241,6 +254,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     // Save for convenience
     localStorage.setItem('docesGourmetName', details.name);
+    if (details.phone) {
+      localStorage.setItem('docesGourmetPhone', details.phone);
+    }
     if (details.deliveryAddress) {
       localStorage.setItem('docesGourmetAddress', details.deliveryAddress);
     }
@@ -261,6 +277,41 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       couponDiscount
     });
     setIsSubmitting(false);
+  };
+
+  const handleCopyOrderMessageOnly = () => {
+    const newErrors: { name?: string; phone?: string; date?: string; time?: string; deliveryAddress?: string } = {};
+
+    if (!details.name.trim()) {
+      newErrors.name = 'Por favor, informe seu nome completo antes de copiar a mensagem.';
+    }
+    if (!details.phone?.trim()) {
+      newErrors.phone = 'Informe seu telefone/WhatsApp antes de copiar a mensagem.';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    const itemsList = Object.values(cart) as CartItem[];
+    const message = buildWhatsAppMessage({
+      orderDetails: details,
+      items: itemsList,
+      cartSubtotal: cartTotal,
+      finalTotal,
+      discountAmount,
+      couponCode: couponValidation?.valid ? appliedCouponCode : undefined,
+      couponDiscount,
+      deliveryFee: currentDeliveryFee,
+      pickupAddress,
+      pixKey,
+      template: customWhatsAppTemplate
+    });
+
+    navigator.clipboard.writeText(message);
+    setCopiedMessageOnly(true);
+    setTimeout(() => setCopiedMessageOnly(false), 3000);
   };
 
   const itemsList = Object.values(cart) as CartItem[];
@@ -441,6 +492,46 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {errors.name && (
                 <p className="text-xs text-red-600 flex items-center gap-1 font-medium pl-1">
                   <AlertCircle className="w-3 h-3" /> {errors.name}
+                </p>
+              )}
+            </div>
+
+            {/* Customer Phone (WhatsApp) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                  Telefone / WhatsApp *
+                </label>
+                <span className="text-[10px] text-neutral-400 font-medium">
+                  Para confirmação & avisos
+                </span>
+              </div>
+              <input
+                type="tel"
+                placeholder="(DDD) 99999-9999"
+                className={cn(
+                  "w-full p-3.5 bg-neutral-50 border rounded-2xl focus:outline-none transition-all text-sm font-mono sm:font-sans",
+                  errors.phone
+                    ? "border-red-500 ring-2 ring-red-100"
+                    : "border-neutral-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
+                )}
+                value={details.phone || ''}
+                onChange={(e) => {
+                  // Format as user types
+                  let v = e.target.value.replace(/\D/g, '');
+                  if (v.length > 11) v = v.slice(0, 11);
+                  let formatted = v;
+                  if (v.length > 2) formatted = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+                  if (v.length > 7) formatted = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
+                  
+                  setDetails((prev) => ({ ...prev, phone: formatted }));
+                  if (errors.phone) setErrors((prev) => ({ ...prev, phone: undefined }));
+                }}
+              />
+              {errors.phone && (
+                <p className="text-xs text-red-600 flex items-center gap-1 font-medium pl-1">
+                  <AlertCircle className="w-3 h-3" /> {errors.phone}
                 </p>
               )}
             </div>
@@ -746,7 +837,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </div>
         </div>
 
-        {/* Footer Submit & PDF Buttons */}
+        {/* Footer Submit, Copy & PDF Buttons */}
         <div className="p-5 bg-neutral-50 border-t border-neutral-200 space-y-2.5">
           <button
             onClick={handleValidationAndSend}
@@ -757,14 +848,35 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             ENVIAR PEDIDO VIA WHATSAPP ({formatCurrency(finalTotal)})
           </button>
 
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            className="w-full py-3 bg-white hover:bg-neutral-100 text-brand-wine font-bold border border-brand-wine/20 rounded-2xl flex items-center justify-center gap-2 text-xs transition-all"
-          >
-            <Download className="w-4 h-4 text-brand-gold" />
-            BAIXAR ORÇAMENTO FORMAL EM PDF
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleCopyOrderMessageOnly}
+              className="w-full py-3 bg-white hover:bg-neutral-100 text-neutral-700 font-bold border border-neutral-300 rounded-2xl flex items-center justify-center gap-2 text-xs transition-all shadow-sm active:scale-95"
+              title="Copia o texto completo do pedido formatado para colar onde desejar"
+            >
+              {copiedMessageOnly ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span className="text-emerald-700">MENSAGEM COPIADA!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 text-neutral-500" />
+                  <span>COPIAR SÓ A MENSAGEM</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="w-full py-3 bg-white hover:bg-neutral-100 text-brand-wine font-bold border border-brand-wine/20 rounded-2xl flex items-center justify-center gap-2 text-xs transition-all shadow-sm active:scale-95"
+            >
+              <Download className="w-4 h-4 text-brand-gold" />
+              <span>BAIXAR ORÇAMENTO PDF</span>
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>

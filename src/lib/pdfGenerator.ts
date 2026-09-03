@@ -89,13 +89,14 @@ export function generateOrderPdf({
   doc.setTextColor(50, 50, 50);
 
   const customerName = orderDetails?.name || 'Cliente';
+  const customerPhone = orderDetails?.phone || '';
   const eventDate = orderDetails?.date ? orderDetails.date.split('-').reverse().join('/') : 'A combinar';
   const eventTime = orderDetails?.time || 'A combinar';
   const paymentMethod = orderDetails?.paymentMethod || 'PIX';
 
   doc.text(`Cliente / Responsável: `, 18, currentY + 14);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${customerName}`, 55, currentY + 14);
+  doc.text(`${customerName}${customerPhone ? ` (${customerPhone})` : ''}`, 55, currentY + 14);
 
   doc.setFont('helvetica', 'normal');
   doc.text(`Data do Evento / Retirada: `, 18, currentY + 20);

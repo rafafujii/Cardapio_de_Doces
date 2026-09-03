@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DEFAULT_WHATSAPP_TEMPLATE } from '../lib/whatsappHelper';
+import { DEFAULT_48H_REMINDER_TEMPLATE } from '../lib/reminderHelper';
 import { playNewOrderNotification } from '../lib/audioNotifier';
 import { 
   getNotificationPermission, 
@@ -122,6 +123,10 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
     enableConsolidatedReports: true,
     seasonalTheme: 'default' as 'default' | 'easter' | 'mothers_day' | 'christmas' | 'halloween',
     seasonalThemeBanner: '',
+    // Lembretes Automáticos para Pedidos Pendentes > 48h
+    autoReminder48hEnabled: false,
+    autoReminder48hTime: '10:00',
+    autoReminder48hTemplate: DEFAULT_48H_REMINDER_TEMPLATE,
     ...settings
   });
 
@@ -1151,6 +1156,95 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                 placeholder="Ex: 🐰 Edição Especial de Páscoa: Garanta seus ovos recheados e brigadeiros temáticos!"
               />
             </FormField>
+          </div>
+
+          {/* Seção 12: Automação de Lembretes para Pedidos Pendentes (> 48h) */}
+          <div className="pt-6 border-t border-neutral-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-black text-brand-wine uppercase tracking-wider">
+                <Clock className="w-4 h-4 text-brand-gold" />
+                <span>12. Lembretes Automáticos para Pedidos Pendentes (&gt; 48h)</span>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                Recuperação de Vendas
+              </span>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Configure a rotina de lembretes automáticos e mensagens personalizadas para clientes com pedidos pendentes sem resposta há mais de 48 horas.
+            </p>
+
+            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-neutral-800 block">Ativar Rotina Automática de Lembretes 48h</span>
+                  <span className="text-[11px] text-neutral-500">O sistema alerta e prepara os disparos para encomendas pendentes há mais de 2 dias</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, autoReminder48hEnabled: !formData.autoReminder48hEnabled })}
+                  className={cn(
+                    "p-1 rounded-full transition-colors shrink-0",
+                    formData.autoReminder48hEnabled ? "text-brand-wine" : "text-neutral-300"
+                  )}
+                >
+                  {formData.autoReminder48hEnabled ? (
+                    <ToggleRight className="w-8 h-8 text-brand-wine fill-brand-wine/20" />
+                  ) : (
+                    <ToggleLeft className="w-8 h-8 text-neutral-400" />
+                  )}
+                </button>
+              </div>
+
+              {formData.autoReminder48hEnabled && (
+                <div className="pt-3 border-t border-neutral-200 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField label="Horário Preferencial de Execução Diária" icon={<Clock className="w-4 h-4" />}>
+                    <input 
+                      type="time"
+                      className="w-full p-3 bg-white border border-neutral-200 rounded-xl text-sm font-medium text-neutral-800"
+                      value={formData.autoReminder48hTime || '10:00'}
+                      onChange={(e) => setFormData({ ...formData, autoReminder48hTime: e.target.value })}
+                    />
+                  </FormField>
+                </div>
+              )}
+
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-neutral-700 block">
+                    Modelo da Mensagem do Lembrete:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, autoReminder48hTemplate: DEFAULT_48H_REMINDER_TEMPLATE })}
+                    className="text-[10px] font-bold text-brand-wine hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Restaurar Padrão
+                  </button>
+                </div>
+
+                <textarea
+                  rows={8}
+                  className="w-full p-3 bg-white border border-neutral-200 rounded-xl font-mono text-xs text-neutral-700 leading-relaxed"
+                  value={formData.autoReminder48hTemplate || DEFAULT_48H_REMINDER_TEMPLATE}
+                  onChange={(e) => setFormData({ ...formData, autoReminder48hTemplate: e.target.value })}
+                />
+
+                <div className="flex flex-wrap gap-1 text-[10px] text-neutral-500 pt-1">
+                  <span className="font-bold">Tags disponíveis:</span>
+                  {['{nome}', '{numero_pedido}', '{tempo_espera}', '{itens}', '{total}', '{data}', '{horario}', '{chave_pix}', '{endereco}'].map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, autoReminder48hTemplate: (prev.autoReminder48hTemplate || DEFAULT_48H_REMINDER_TEMPLATE) + tag }))}
+                      className="px-1.5 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded font-mono text-neutral-800 cursor-pointer"
+                    >
+                      +{tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
           <button 

@@ -17,7 +17,12 @@
         "status": { "type": "string", "enum": ["pending", "completed", "cancelled", "deleted"] },
         "createdAt": { "type": "string", "format": "date-time" },
         "deletedAt": { "type": "string", "format": "date-time" },
-        "notes": { "type": "string" }
+        "notes": { "type": "string" },
+        "scheduledReminderAt": { "type": "string", "format": "date-time", "description": "Scheduled date and time for automatic reminder" },
+        "scheduledReminderMessage": { "type": "string", "description": "Customized message for the scheduled reminder" },
+        "scheduledReminderStatus": { "type": "string", "enum": ["none", "scheduled", "sent", "cancelled"], "description": "Current status of the scheduled reminder" },
+        "lastReminderSentAt": { "type": "string", "format": "date-time", "description": "Timestamp when the last reminder was sent" },
+        "reminderCount": { "type": "number", "description": "Total number of reminders sent to customer" }
       },
       "required": ["customerName", "date", "time", "items", "total", "createdAt"]
     },
@@ -143,6 +148,9 @@
         "googleSheetId": { "type": "string" },
         "pixKey": { "type": "string" },
         "pickupAddress": { "type": "string" },
+        "autoReminder48hEnabled": { "type": "boolean", "description": "Enable automated background reminders for pending orders over 48h" },
+        "autoReminder48hTime": { "type": "string", "description": "Daily scheduled execution time for automated reminders (e.g. 09:00)" },
+        "autoReminder48hTemplate": { "type": "string", "description": "Message template for automated 48h pending reminders" },
         "updatedAt": { "type": "string", "format": "date-time" }
       }
     },

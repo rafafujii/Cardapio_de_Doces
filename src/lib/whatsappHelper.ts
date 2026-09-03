@@ -15,7 +15,7 @@ export const DEFAULT_WHATSAPP_TEMPLATE = `✨ *NOVO PEDIDO - S.E DOCES GOURMET* 
 {bloco_endereco}
 📅 *Data:* {data}
 ⏰ *Horário:* {horario}
-💳 *Forma de Pagamento:* {forma_pagamento}{bloco_troco}{bloco_observacoes}
+💳 *Forma de Pagamento:* {forma_pagamento}{bloco_troco}{bloco_telefone}{bloco_observacoes}
 
 _Pedido gerado pelo catálogo digital gourmet._`;
 
@@ -88,6 +88,11 @@ export function buildWhatsAppMessage({
     blocoTroco = `\n💵 *Troco para:* R$ ${orderDetails.changeAmount}`;
   }
 
+  let blocoTelefone = '';
+  if (orderDetails.phone) {
+    blocoTelefone = `\n📱 *Telefone/WhatsApp do Cliente:* ${orderDetails.phone}`;
+  }
+
   let blocoObservacoes = '';
   if (orderDetails.notes) {
     blocoObservacoes = `\n📝 *Observações:* ${orderDetails.notes}`;
@@ -98,6 +103,8 @@ export function buildWhatsAppMessage({
   let msg = tmpl
     .replace(/{saudacao}/g, saudacao)
     .replace(/{cliente}/g, orderDetails.name)
+    .replace(/{telefone}/g, orderDetails.phone || '')
+    .replace(/{bloco_telefone}/g, blocoTelefone)
     .replace(/{itens}/g, itemsText.trimEnd())
     .replace(/{subtotal}/g, formatCurrency(cartSubtotal))
     .replace(/{total}/g, formatCurrency(finalTotal))

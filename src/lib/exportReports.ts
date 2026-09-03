@@ -66,7 +66,7 @@ export function exportSalesToCsv({
       formattedDate,
       order.time || '-',
       `"${(order.customerName || 'Cliente').replace(/"/g, '""')}"`,
-      `"${(order.customerPhone || '-').replace(/"/g, '""')}"`,
+      `"${(order.customerPhone || order.phone || '-').replace(/"/g, '""')}"`,
       statusLabel,
       order.paymentMethod || 'Pix',
       revenue.toFixed(2).replace('.', ','),

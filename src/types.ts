@@ -214,5 +214,17 @@ export interface GlobalSettingsState {
   // Grupo 5: #2 Temas Sazonais
   seasonalTheme?: 'classic' | 'easter' | 'mothers_day' | 'christmas' | 'halloween';
   seasonalThemeBanner?: string;
+  // Lembretes Automáticos para Pedidos Pendentes > 48h
+  autoReminder48hEnabled?: boolean;
+  autoReminder48hTime?: string;
+  autoReminder48hTemplate?: string;
+}
+
+export interface ScheduledReminderRecord {
+  orderId: string;
+  scheduledAt: string;
+  message: string;
+  status: 'scheduled' | 'sent' | 'cancelled';
+  createdAt?: string;
 }
 

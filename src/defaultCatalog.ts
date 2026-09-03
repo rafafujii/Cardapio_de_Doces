@@ -29,8 +29,8 @@ export const DEFAULT_CATALOG: CategoryGroup[] = [
         name: "Brigadeiro Tradicional (Granulado)",
         priceCento: 150,
         unitPrice: 1.5,
-        imageUrl: "https://via.placeholder.com/400x300/800020/D4AF37?text=Tradicional+Granulado",
-        badge: null
+        imageUrl: PRODUCT_IMAGES["Brigadeiro Tradicional"] || DEFAULT_IMAGE,
+        badge: "🔥 Mais Vendido"
       },
       {
         id: 2,
@@ -66,7 +66,7 @@ export const DEFAULT_CATALOG: CategoryGroup[] = [
         priceCento: 165,
         unitPrice: 1.65,
         imageUrl: "https://i.postimg.cc/3xqRKXVJ/imagem-2026-05-10-204822103.png",
-        badge: null
+        badge: "🥥 Favorito"
       }
     ]
   },
@@ -134,7 +134,7 @@ export const DEFAULT_CATALOG: CategoryGroup[] = [
         priceCento: 260,
         unitPrice: 2.6,
         imageUrl: DEFAULT_IMAGE,
-        badge: null
+        badge: "🍇 Mais Pedido"
       },
       {
         id: 13,
@@ -301,7 +301,7 @@ export const DEFAULT_CATALOG: CategoryGroup[] = [
         priceCento: 380,
         unitPrice: 3.8,
         imageUrl: DEFAULT_IMAGE,
-        badge: null
+        badge: "🍓 Mais Vendido"
       },
       {
         id: 31,
@@ -355,7 +355,7 @@ export const DEFAULT_CATALOG: CategoryGroup[] = [
         priceCento: 400,
         unitPrice: 4.0,
         imageUrl: DEFAULT_IMAGE,
-        badge: null
+        badge: "🌰 Destaque"
       },
       {
         id: 37,
@@ -378,7 +378,7 @@ export const DEFAULT_CATALOG: CategoryGroup[] = [
         priceCento: null,
         unitPrice: 18.0,
         imageUrl: DEFAULT_IMAGE,
-        badge: null
+        badge: "⭐ Sucesso"
       },
       {
         id: 39,
@@ -401,7 +401,7 @@ export const DEFAULT_CATALOG: CategoryGroup[] = [
         priceCento: null,
         unitPrice: 12.0,
         imageUrl: PRODUCT_IMAGES["Cone"] || DEFAULT_IMAGE,
-        badge: null
+        badge: "🍫 Top 1 Mais Vendido"
       }
     ]
   }

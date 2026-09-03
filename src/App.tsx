@@ -60,7 +60,9 @@ import {
   MessageSquare,
   Tag,
   Moon,
-  Sun
+  Sun,
+  Heart,
+  Send
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn, formatCurrency, removeAcentos, getProductUnitPrice, cleanFirestoreData } from './lib/utils';
@@ -124,6 +126,9 @@ import { TrackingView } from './components/TrackingView';
 import { AdminCouponsTab } from './components/AdminCouponsTab';
 import { CouponBanner } from './components/CouponBanner';
 import { CustomerReviewModal } from './components/CustomerReviewModal';
+import { AdminPendingRemindersModal } from './components/AdminPendingRemindersModal';
+import { useAutoReminders } from './hooks/useAutoReminders';
+import { DEFAULT_48H_REMINDER_TEMPLATE, isOrderPendingOver48h } from './lib/reminderHelper';
 
 function sendBrowserNotification(title: string, body: string) {
   if (!("Notification" in window)) return;
@@ -153,6 +158,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentCategory, setCurrentCategory] = useState('Todos');
+  const [isWishlistOnly, setIsWishlistOnly] = useState(false);
   const [cart, setCart] = useState<Record<number, CartItem>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -212,7 +218,10 @@ export function App() {
     enablePredictiveStockAlerts: true,
     enableConsolidatedReports: true,
     seasonalTheme: 'default' as 'default' | 'easter' | 'mothers_day' | 'christmas' | 'halloween',
-    seasonalThemeBanner: ''
+    seasonalThemeBanner: '',
+    autoReminder48hEnabled: false,
+    autoReminder48hTime: '10:00',
+    autoReminder48hTemplate: DEFAULT_48H_REMINDER_TEMPLATE
   });
 
   const { wishlistIds, isWishlisted, toggleWishlist } = useWishlist();
@@ -446,13 +455,28 @@ export function App() {
               newList = [updated, ...prev];
             }
 
-            if (!initialLoad && oldOrder && oldOrder.status !== updated.status) {
+            const statusChanged = !initialLoad && oldOrder && oldOrder.status !== updated.status;
+            const messageChanged = !initialLoad && oldOrder && updated.customNotificationMessage && oldOrder.customNotificationMessage !== updated.customNotificationMessage;
+
+            if (statusChanged || messageChanged) {
+              const customMsg = updated.customNotificationMessage;
               const statusMsg = 
-                updated.status === 'confirmed' ? "Seu pedido foi confirmado pela confeitaria! 🎉" :
-                updated.status === 'preparing' ? "Seus doces já estão sendo preparados com carinho! 🍫" :
-                updated.status === 'ready' ? "Seu pedido está pronto para retirada! 🛍️" :
-                updated.status === 'completed' ? "Seu pedido foi entregue. Obrigado! ❤️" : "";
-              if (statusMsg) sendBrowserNotification("S.E Doces Gourmet", statusMsg);
+                updated.status === 'confirmed' ? (customMsg || "Seu pedido foi confirmado pela confeitaria! 🎉") :
+                updated.status === 'preparing' ? (customMsg || "Seus doces já estão sendo preparados com carinho! 🍫") :
+                updated.status === 'ready' ? (customMsg || "Seu pedido de doces gourmet está pronto para retirada! 🛍️✨") :
+                updated.status === 'completed' ? (customMsg || "Seu pedido foi entregue. Muito obrigado! ❤️") : (customMsg || "");
+
+              if (statusMsg) {
+                sendPwaOrderNotification({
+                  title: updated.status === 'ready' ? "🛍️ Pedido Pronto! • S.E Doces Gourmet" : "S.E Doces Gourmet",
+                  body: statusMsg,
+                  orderId: updated.id,
+                  customerName: updated.customerName,
+                  playSound: true,
+                  vibrate: true
+                });
+                sendBrowserNotification("S.E Doces Gourmet", statusMsg);
+              }
             }
             
             return newList;
@@ -486,10 +510,25 @@ export function App() {
     setView('catalog');
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+  const updateOrderStatus = async (
+    orderId: string, 
+    newStatus: string, 
+    customMessage?: string,
+    notifyPwa?: boolean
+  ) => {
     try {
       const orderRef = doc(db, 'orders', orderId);
-      const updates: any = { status: newStatus };
+      const updates: any = { 
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      };
+
+      if (customMessage !== undefined) {
+        updates.customNotificationMessage = customMessage;
+        updates.statusNotificationAt = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        updates.statusNotificationDate = new Date().toISOString();
+      }
+
       if (newStatus === 'deleted') {
         updates.deletedAt = serverTimestamp();
       } else {
@@ -499,8 +538,31 @@ export function App() {
       await updateDoc(orderRef, updates);
       
       setAdminOrders(prev => prev.map(order => 
-        order.id === orderId ? { ...order, ...updates } : order
+        order.id === orderId ? { 
+          ...order, 
+          ...updates,
+          customNotificationMessage: customMessage !== undefined ? customMessage : order.customNotificationMessage,
+          statusNotificationAt: customMessage !== undefined ? updates.statusNotificationAt : order.statusNotificationAt
+        } : order
       ));
+
+      // Trigger PWA notification
+      if (notifyPwa !== false) {
+        const targetOrder = adminOrders.find(o => o.id === orderId);
+        const customerName = targetOrder?.customerName || 'Cliente';
+        const msgText = customMessage || (newStatus === 'ready' 
+          ? `Seus doces gourmet estão prontos e embalados com todo o carinho! 🛍️✨`
+          : `Status do pedido atualizado para: ${newStatus}`);
+        
+        sendPwaOrderNotification({
+          title: newStatus === 'ready' ? "🛍️ Pedido Pronto! • S.E Doces Gourmet" : "Atualização do Pedido • S.E Doces Gourmet",
+          body: msgText,
+          orderId,
+          customerName,
+          playSound: true,
+          vibrate: true
+        });
+      }
     } catch (err) {
       console.error("Failed to update status", err);
     }
@@ -540,13 +602,18 @@ export function App() {
       ...group,
       items: group.items.filter(item => {
         const matchesCategory = currentCategory === 'Todos' || group.category === currentCategory;
+
+        // If "isWishlistOnly" is active, show only products that are in the user's favorites
+        if (isWishlistOnly && !isWishlisted(item.id)) {
+          return false;
+        }
         
         let matchesSearch = true;
         if (searchTerm.trim()) {
           const cleanSearch = removeAcentos(searchTerm.toLowerCase());
-          if (cleanSearch === 'mais vendidos' || cleanSearch === 'destaques') {
+          if (cleanSearch === 'mais vendidos' || cleanSearch === 'mais vendido' || cleanSearch === 'destaques' || cleanSearch === 'destaque') {
             matchesSearch = !!item.badge;
-          } else if (cleanSearch === 'favoritos' || cleanSearch === 'meus favoritos') {
+          } else if (cleanSearch === 'favoritos' || cleanSearch === 'meus favoritos' || cleanSearch === 'favorito') {
             matchesSearch = isWishlisted(item.id);
           } else {
             matchesSearch = 
@@ -559,7 +626,7 @@ export function App() {
         return matchesCategory && matchesSearch;
       })
     })).filter(group => group.items.length > 0);
-  }, [catalog, currentCategory, searchTerm]);
+  }, [catalog, currentCategory, searchTerm, isWishlistOnly, wishlistIds]);
 
   // Cart Operations (Minimum 25 units per item, step by 1)
   const addToCart = (product: Product, isUnit?: boolean, initialQty?: number) => {
@@ -1042,6 +1109,8 @@ export function App() {
     try {
       const docRef = await addDoc(collection(db, 'orders'), {
         customerName: orderDetails.name,
+        customerPhone: orderDetails.phone || '',
+        phone: orderDetails.phone || '',
         date: orderDetails.date,
         time: orderDetails.time,
         items,
@@ -1139,7 +1208,10 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen pb-24 md:pb-8 bg-brand-cream/30 text-neutral-900">
+    <div className={cn(
+      "min-h-screen bg-brand-cream/30 text-neutral-900 transition-all",
+      cartCount > 0 && view === 'catalog' ? "pb-32 sm:pb-36 md:pb-8" : "pb-16 md:pb-8"
+    )}>
       {/* Offline Connectivity Status Bar */}
       <OfflineIndicator />
 
@@ -1284,13 +1356,31 @@ export function App() {
             <section className="mb-8 space-y-4">
               <QuickSearchChips 
                 searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
+                onSearchChange={(term) => {
+                  setSearchTerm(term);
+                }}
                 onSelectChip={(chip) => {
-                  setSearchTerm(chip);
-                  setCurrentCategory('Todos');
+                  if (searchTerm.toLowerCase() === chip.toLowerCase() && !isWishlistOnly) {
+                    setSearchTerm('');
+                  } else {
+                    setSearchTerm(chip);
+                    setIsWishlistOnly(false);
+                    setCurrentCategory('Todos');
+                  }
                 }}
                 showWishlist={globalSettings.enableWishlist !== false}
                 favoritesCount={wishlistIds.length}
+                isWishlistOnly={isWishlistOnly}
+                onToggleWishlistFilter={() => {
+                  setIsWishlistOnly(prev => {
+                    const next = !prev;
+                    if (next && searchTerm.toLowerCase() === 'mais vendidos') {
+                      setSearchTerm('');
+                    }
+                    return next;
+                  });
+                }}
+                additionalChips={(globalSettings as any).customFilterChips || []}
               />
 
               {/* Category Filter Pills */}
@@ -1314,6 +1404,27 @@ export function App() {
                 </div>
               </div>
             </section>
+
+            {/* Active Favorites Banner */}
+            {isWishlistOnly && (
+              <div className="mb-6 flex items-center justify-between p-3.5 bg-rose-50/90 border border-rose-200 rounded-2xl shadow-xs animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-rose-950 text-xs font-bold">
+                  <div className="w-6 h-6 rounded-full bg-rose-100 flex items-center justify-center shrink-0">
+                    <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500" />
+                  </div>
+                  <span>
+                    Exibindo apenas os seus doces favoritos ({wishlistIds.length} {wishlistIds.length === 1 ? 'item salvo' : 'itens salvos'})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsWishlistOnly(false)}
+                  className="text-xs font-black text-rose-700 hover:text-rose-900 underline ml-2 shrink-0 cursor-pointer"
+                >
+                  Ver catálogo completo
+                </button>
+              </div>
+            )}
 
             {/* Product Grid */}
             <div id="catalog-grid" className="space-y-16">
@@ -1347,19 +1458,51 @@ export function App() {
               ))}
               
               {filteredCatalog.length === 0 && (
-                <div className="text-center py-20 bg-white rounded-3xl p-8 border border-neutral-100 shadow-sm max-w-lg mx-auto">
-                  <p className="text-neutral-500 font-serif italic text-lg mb-4">
-                    Nenhuma doçura encontrada para "{searchTerm}"
-                  </p>
-                  <button
-                    onClick={() => {
-                      setSearchTerm('');
-                      setCurrentCategory('Todos');
-                    }}
-                    className="px-6 py-2.5 bg-brand-wine text-brand-gold text-xs font-bold rounded-full shadow-sm hover:bg-brand-wine/90 transition-all"
-                  >
-                    Ver Todos os Doces
-                  </button>
+                <div className="text-center py-16 bg-white rounded-3xl p-8 border border-neutral-100 shadow-sm max-w-lg mx-auto">
+                  {isWishlistOnly ? (
+                    <>
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-500 shadow-xs">
+                        <Heart className="w-8 h-8 fill-rose-500 text-rose-500" />
+                      </div>
+                      <h3 className="text-lg md:text-xl font-serif font-bold text-brand-wine mb-2">
+                        {wishlistIds.length === 0 
+                          ? "Você ainda não favoritou nenhum doce" 
+                          : "Nenhum doce favorito nesta categoria ou busca"}
+                      </h3>
+                      <p className="text-neutral-500 text-xs md:text-sm mb-6 max-w-sm mx-auto leading-relaxed">
+                        {wishlistIds.length === 0 
+                          ? "Clique no ícone de coração (❤️) em qualquer doce do catálogo para salvá-lo aqui e encontrá-lo com muito mais facilidade!"
+                          : "Você possui outros doces favoritados no catálogo. Limpe a categoria ou a busca para visualizá-los."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsWishlistOnly(false);
+                          setSearchTerm('');
+                          setCurrentCategory('Todos');
+                        }}
+                        className="px-6 py-2.5 bg-brand-wine text-brand-gold text-xs font-bold rounded-full shadow-sm hover:bg-brand-wine/90 active:scale-95 transition-all cursor-pointer"
+                      >
+                        Ver Todos os Doces do Catálogo
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-neutral-500 font-serif italic text-lg mb-4">
+                        Nenhuma doçura encontrada para "{searchTerm}"
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchTerm('');
+                          setCurrentCategory('Todos');
+                        }}
+                        className="px-6 py-2.5 bg-brand-wine text-brand-gold text-xs font-bold rounded-full shadow-sm hover:bg-brand-wine/90 transition-all cursor-pointer"
+                      >
+                        Ver Todos os Doces
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1404,7 +1547,7 @@ export function App() {
             />
           </div>
         ) : (
-          <TrackingView orders={myOrders} onBack={() => setView('catalog')} />
+          <TrackingView orders={myOrders} onBack={() => setView('catalog')} globalSettings={globalSettings} />
         )}
       </main>
 
@@ -1652,7 +1795,7 @@ function AdminView({
 }: { 
   orders: any[], 
   loading: boolean, 
-  onUpdateStatus: (id: string, status: string) => void, 
+  onUpdateStatus: (id: string, status: string, customMessage?: string, notifyPwa?: boolean) => void, 
   onDeletePermanent: (id: string) => void,
   productCosts: Record<string, number>,
   onUpdateCost: (name: string, cost: number) => void,
@@ -1686,8 +1829,22 @@ function AdminView({
   onToggleAdminDarkMode?: () => void
 }) {
   const [periodFilter, setPeriodFilter] = useState<'all' | 'week' | 'month' | 'year' | 'trash'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled'>('all');
   const [filterOverduePendingOnly, setFilterOverduePendingOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<'orders' | 'production' | 'ready_boxes' | 'calculator' | 'crm' | 'coupons' | 'inventory' | 'quick_replies' | 'reviews' | 'settings'>('orders');
+
+  // Order status counts for fast filtering
+  const statusCounts = useMemo(() => {
+    const active = orders.filter(o => o.status !== 'deleted');
+    return {
+      all: active.length,
+      pending: active.filter(o => o.status === 'pending').length,
+      preparing: active.filter(o => o.status === 'preparing' || o.status === 'confirmed').length,
+      ready: active.filter(o => o.status === 'ready').length,
+      delivered: active.filter(o => o.status === 'completed' || o.status === 'delivered').length,
+      cancelled: active.filter(o => o.status === 'cancelled').length,
+    };
+  }, [orders]);
 
   // Pending orders without updates for > 24 hours
   const overduePendingOrders = useMemo(() => {
@@ -1719,6 +1876,20 @@ function AdminView({
     }
   }, [overduePendingOrders.length, filterOverduePendingOnly]);
 
+  // Automated 48h Reminders state & hook
+  const [isRemindersModalOpen, setIsRemindersModalOpen] = useState(false);
+  const [selectedReminderOrderId, setSelectedReminderOrderId] = useState<string | null>(null);
+
+  const {
+    pendingOrdersOver48h,
+    dueScheduledReminders,
+    upcomingScheduledReminders,
+    scheduleOrder,
+    scheduleBulk,
+    cancelSchedule,
+    dispatchWhatsApp
+  } = useAutoReminders(orders, globalSettings);
+
   const filteredOrders = useMemo(() => {
     if (filterOverduePendingOnly) {
       return overduePendingOrders;
@@ -1729,6 +1900,18 @@ function AdminView({
         return order.status === 'deleted';
       }
       if (order.status === 'deleted') return false;
+
+      // Status Filter
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'preparing') {
+          if (order.status !== 'preparing' && order.status !== 'confirmed') return false;
+        } else if (statusFilter === 'delivered') {
+          if (order.status !== 'completed' && order.status !== 'delivered') return false;
+        } else if (order.status !== statusFilter) {
+          return false;
+        }
+      }
+
       if (periodFilter === 'all') return true;
       const orderDate = order.createdAt instanceof Timestamp ? order.createdAt.toDate() : new Date();
       if (periodFilter === 'week') {
@@ -1744,7 +1927,7 @@ function AdminView({
       }
       return true;
     });
-  }, [orders, periodFilter, filterOverduePendingOnly, overduePendingOrders]);
+  }, [orders, periodFilter, statusFilter, filterOverduePendingOnly, overduePendingOrders]);
 
   const stats = useMemo(() => {
     const activeOrders = orders.filter(o => o.status !== 'deleted');
@@ -1825,174 +2008,212 @@ function AdminView({
           <p className="text-neutral-500 text-sm">Gerencie pedidos, produção, pronta entrega, lucratividade e clientes.</p>
         </div>
         
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap p-1.5 bg-neutral-100 rounded-2xl gap-1">
-          <button 
-            type="button"
-            onClick={() => {
-              setActiveTab('orders');
-              if (filterOverduePendingOnly) setFilterOverduePendingOnly(false);
-            }}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'orders' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <Package className="w-3.5 h-3.5" />
-            Pedidos ({orders.filter(o => o.status !== 'deleted').length})
-            {overduePendingOrders.length > 0 && (
-              <span 
-                className="px-1.5 py-0.5 bg-rose-600 text-white font-black text-[9px] rounded-full animate-pulse flex items-center gap-0.5 shadow-xs"
-                title={`${overduePendingOrders.length} pedido(s) pendente(s) há mais de 24h sem atualização`}
-              >
-                <AlertTriangle className="w-2.5 h-2.5 text-amber-200" />
-                {overduePendingOrders.length}
-              </span>
-            )}
-          </button>
+        {/* Navigation Tabs (Mobile Smooth Horizontal Scroll + Desktop Compact Bar) */}
+        <div className="w-full lg:w-auto max-w-full overflow-hidden">
+          <div className="flex items-center overflow-x-auto no-scrollbar py-1.5 px-2 bg-neutral-100 dark:bg-neutral-850 rounded-2xl gap-1.5 max-w-full touch-pan-x scroll-smooth border border-neutral-200/60 dark:border-neutral-700/60 shadow-inner">
+            <button 
+              type="button"
+              onClick={() => {
+                setActiveTab('orders');
+                if (filterOverduePendingOnly) setFilterOverduePendingOnly(false);
+              }}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'orders' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <Package className="w-3.5 h-3.5" />
+              Pedidos ({orders.filter(o => o.status !== 'deleted').length})
+              {overduePendingOrders.length > 0 && (
+                <span 
+                  className="px-1.5 py-0.5 bg-rose-600 text-white font-black text-[9px] rounded-full animate-pulse flex items-center gap-0.5 shadow-xs"
+                  title={`${overduePendingOrders.length} pedido(s) pendente(s) há mais de 24h sem atualização`}
+                >
+                  <AlertTriangle className="w-2.5 h-2.5 text-amber-200" />
+                  {overduePendingOrders.length}
+                </span>
+              )}
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setActiveTab('production')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'production' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <ChefHat className="w-3.5 h-3.5 text-brand-gold" />
-            Produção
-            {todayProductionCount > 0 && (
-              <span className="px-1.5 py-0.5 bg-brand-gold text-brand-wine font-black text-[9px] rounded-full animate-pulse">
-                {todayProductionCount}
-              </span>
-            )}
-          </button>
+            <button 
+              type="button"
+              onClick={() => setActiveTab('production')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'production' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <ChefHat className="w-3.5 h-3.5 text-brand-gold" />
+              Produção
+              {todayProductionCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-brand-gold text-brand-wine font-black text-[9px] rounded-full animate-pulse">
+                  {todayProductionCount}
+                </span>
+              )}
+            </button>
 
-          {/* Feature 4: Pronta Entrega / Doces de Hoje */}
-          <button 
-            type="button"
-            onClick={() => setActiveTab('ready_boxes')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'ready_boxes' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            Doces de Hoje
-            {activeReadyBoxesCount > 0 && (
-              <span className="px-1.5 py-0.5 bg-emerald-500 text-white font-black text-[9px] rounded-full">
-                {activeReadyBoxesCount}
-              </span>
-            )}
-          </button>
+            {/* Feature 4: Pronta Entrega / Doces de Hoje */}
+            <button 
+              type="button"
+              onClick={() => setActiveTab('ready_boxes')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'ready_boxes' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              Doces de Hoje
+              {activeReadyBoxesCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-emerald-500 text-white font-black text-[9px] rounded-full">
+                  {activeReadyBoxesCount}
+                </span>
+              )}
+            </button>
 
-          {/* Feature 2: Calculadora Reversa de Lucro & Panela */}
-          <button 
-            type="button"
-            onClick={() => setActiveTab('calculator')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'calculator' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <Calculator className="w-3.5 h-3.5 text-brand-gold" />
-            Calc. Lucro Real
-          </button>
+            {/* Feature 2: Calculadora Reversa de Lucro & Panela */}
+            <button 
+              type="button"
+              onClick={() => setActiveTab('calculator')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'calculator' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <Calculator className="w-3.5 h-3.5 text-brand-gold" />
+              Calc. Lucro Real
+            </button>
 
-          {/* Feature 5: CRM do Cliente & Histórico */}
-          <button 
-            type="button"
-            onClick={() => setActiveTab('crm')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'crm' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <Users className="w-3.5 h-3.5 text-blue-500" />
-            CRM Clientes
-            {uniqueCustomersCount > 0 && (
-              <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 font-black text-[9px] rounded-full">
-                {uniqueCustomersCount}
-              </span>
-            )}
-          </button>
+            {/* Feature 5: CRM do Cliente & Histórico */}
+            <button 
+              type="button"
+              onClick={() => setActiveTab('crm')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'crm' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <Users className="w-3.5 h-3.5 text-blue-500" />
+              CRM Clientes
+              {uniqueCustomersCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 font-black text-[9px] rounded-full">
+                  {uniqueCustomersCount}
+                </span>
+              )}
+            </button>
 
-          {/* Feature 7: Cupons & Descontos */}
-          <button 
-            type="button"
-            onClick={() => setActiveTab('coupons')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'coupons' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <Tag className="w-3.5 h-3.5 text-brand-gold" />
-            Cupons
-            {coupons.filter(c => c.active).length > 0 && (
-              <span className="px-1.5 py-0.5 bg-brand-gold text-brand-wine font-black text-[9px] rounded-full">
-                {coupons.filter(c => c.active).length}
-              </span>
-            )}
-          </button>
+            {/* Feature 7: Cupons & Descontos */}
+            <button 
+              type="button"
+              onClick={() => setActiveTab('coupons')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'coupons' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <Tag className="w-3.5 h-3.5 text-brand-gold" />
+              Cupons
+              {coupons.filter(c => c.active).length > 0 && (
+                <span className="px-1.5 py-0.5 bg-brand-gold text-brand-wine font-black text-[9px] rounded-full">
+                  {coupons.filter(c => c.active).length}
+                </span>
+              )}
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setActiveTab('inventory')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'inventory' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <DollarSign className="w-3.5 h-3.5" />
-            Estoque
-          </button>
+            <button 
+              type="button"
+              onClick={() => setActiveTab('inventory')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'inventory' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              Estoque
+            </button>
 
-          {/* Feature 1: Respostas Rápidas de WhatsApp */}
-          <button 
-            type="button"
-            onClick={() => setActiveTab('quick_replies')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'quick_replies' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-            WhatsApp
-          </button>
+            {/* Feature 1: Respostas Rápidas de WhatsApp */}
+            <button 
+              type="button"
+              onClick={() => setActiveTab('quick_replies')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'quick_replies' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+              WhatsApp
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setActiveTab('reviews')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'reviews' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <Star className="w-3.5 h-3.5" />
-            Avaliações
-            {reviews.filter(r => r.status === 'pending').length > 0 && (
-              <span className="px-1.5 py-0.5 bg-red-500 text-white font-black text-[8px] rounded-full">
-                {reviews.filter(r => r.status === 'pending').length}
-              </span>
-            )}
-          </button>
+            <button 
+              type="button"
+              onClick={() => setActiveTab('reviews')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'reviews' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <Star className="w-3.5 h-3.5" />
+              Avaliações
+              {reviews.filter(r => r.status === 'pending').length > 0 && (
+                <span className="px-1.5 py-0.5 bg-red-500 text-white font-black text-[8px] rounded-full">
+                  {reviews.filter(r => r.status === 'pending').length}
+                </span>
+              )}
+            </button>
 
-          <button 
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            className={cn(
-              "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
-              activeTab === 'settings' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
-            )}
-          >
-            <Settings className="w-3.5 h-3.5" />
-            Configurações
-          </button>
+            <button 
+              type="button"
+              onClick={() => setActiveTab('settings')}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[42px] active:scale-95",
+                activeTab === 'settings' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              )}
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Configurações
+            </button>
+          </div>
         </div>
       </div>
 
       {activeTab === 'orders' && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+          {/* Alerta de Lembretes Agendados Prontos para Disparo */}
+          {dueScheduledReminders.length > 0 && (
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-600 via-rose-600 to-rose-700 text-white rounded-3xl shadow-lg border border-amber-300/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
+              <div className="flex items-center gap-3.5">
+                <div className="p-2.5 bg-white/20 rounded-2xl shrink-0">
+                  <BellRing className="w-5 h-5 text-amber-200 animate-bounce" />
+                </div>
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-bold text-sm sm:text-base">
+                      {dueScheduledReminders.length} {dueScheduledReminders.length === 1 ? 'Lembrete Agendado Pronto' : 'Lembretes Agendados Prontos'} para Disparo!
+                    </h4>
+                    <span className="px-2 py-0.5 bg-amber-300 text-rose-950 text-[10px] font-black uppercase rounded-full">
+                      Horário Atingido
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/90">
+                    O horário programado para cobrança gentil dos pedidos pendentes há mais de 48h venceu.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedReminderOrderId(null);
+                  setIsRemindersModalOpen(true);
+                }}
+                className="px-4 py-2.5 bg-white text-rose-950 hover:bg-amber-100 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shrink-0 flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5 text-rose-700" />
+                <span>Abrir e Disparar ({dueScheduledReminders.length})</span>
+              </button>
+            </div>
+          )}
+
           {/* Alerta Visual: Pedidos Pendentes há mais de 24h sem atualização */}
           {overduePendingOrders.length > 0 && (
             <div className="p-5 bg-gradient-to-r from-rose-50 via-amber-50/70 to-rose-50 border-2 border-rose-400/80 rounded-3xl shadow-sm space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -2020,7 +2241,20 @@ function AdminView({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedReminderOrderId(null);
+                      setIsRemindersModalOpen(true);
+                    }}
+                    className="px-4 py-2.5 bg-brand-wine hover:bg-black text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center gap-2 active:scale-95"
+                    title="Agendar ou disparar lembretes automáticos para pedidos pendentes há mais de 48 horas"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Lembretes 48h ({pendingOrdersOver48h.length})</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setFilterOverduePendingOnly(prev => !prev)}
@@ -2067,69 +2301,197 @@ function AdminView({
             </div>
           )}
 
-          {/* Action Bar: Period Filters + Export Buttons (Item 4) */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-neutral-100 shadow-sm">
-            {/* Period Filters */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-black uppercase text-neutral-400 mr-1">Período:</span>
-              {(['all', 'week', 'month', 'year', 'trash'] as const).map((p) => (
+          {/* Action Bar: Quick Status Filters + Period Filters + Export Buttons */}
+          <div className="space-y-3 bg-white dark:bg-neutral-900 p-4 rounded-3xl border border-neutral-100 dark:border-neutral-800 shadow-sm">
+            {/* Quick Status Filter Chips */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-100 dark:border-neutral-800">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full touch-pan-x">
+                <span className="text-[10px] font-black uppercase text-neutral-400 mr-1 shrink-0">Status:</span>
+                
                 <button
-                  key={p}
                   type="button"
-                  onClick={() => setPeriodFilter(p)}
+                  onClick={() => setStatusFilter('all')}
                   className={cn(
-                    "px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-1.5",
-                    periodFilter === p 
-                      ? "bg-brand-gold text-brand-wine border-brand-gold shadow-sm font-black" 
-                      : (p === 'trash' ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-neutral-50 text-neutral-500 border-neutral-200 hover:bg-neutral-100")
+                    "px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[36px]",
+                    statusFilter === 'all'
+                      ? "bg-brand-wine text-brand-gold shadow-xs"
+                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200"
                   )}
                 >
-                  {p === 'trash' && <Trash2 className="w-3 h-3" />}
-                  {p === 'all' ? 'Tudo' : p === 'week' ? 'Semana' : p === 'month' ? 'Mês' : p === 'year' ? 'Ano' : 'Lixeira'}
+                  Todos
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    statusFilter === 'all' ? "bg-brand-gold/20 text-brand-gold" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200"
+                  )}>
+                    {statusCounts.all}
+                  </span>
                 </button>
-              ))}
-            </div>
 
-            {/* Item 4: Export Buttons (Excel .csv & Professional PDF) */}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => exportSalesToCsv({
-                  orders: filteredOrders,
-                  productCosts,
-                  ingredients,
-                  recipes,
-                  periodName: periodFilter === 'all' ? 'Geral Completo' : periodFilter === 'week' ? 'Última Semana' : periodFilter === 'month' ? 'Mês Atual' : periodFilter === 'year' ? 'Ano Atual' : 'Lixeira',
-                  globalSettings
-                })}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all"
-                title="Exportar planilha compatível com Excel e Google Sheets"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                Exportar Excel (.csv)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => exportSalesToPdf({
-                  orders: filteredOrders,
-                  productCosts,
-                  ingredients,
-                  recipes,
-                  periodName: periodFilter === 'all' ? 'Geral Completo' : periodFilter === 'week' ? 'Última Semana' : periodFilter === 'month' ? 'Mês Atual' : periodFilter === 'year' ? 'Ano Atual' : 'Lixeira',
-                  globalSettings
-                })}
-                className="px-3.5 py-2 bg-brand-wine hover:bg-black text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all"
-                title="Gerar Relatório Executivo e Financeiro em PDF"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Exportar PDF (Relatório)
-              </button>
-
-              {globalSettings.enableConsolidatedReports !== false && (
                 <button
                   type="button"
-                  onClick={() => exportConsolidatedDREClosingReportPdf({
+                  onClick={() => setStatusFilter('pending')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[36px]",
+                    statusFilter === 'pending'
+                      ? "bg-amber-500 text-white shadow-xs"
+                      : "bg-amber-50 text-amber-700 border border-amber-200/60 hover:bg-amber-100"
+                  )}
+                >
+                  <Clock className="w-3 h-3" />
+                  Pendentes
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    statusFilter === 'pending' ? "bg-white/30 text-white" : "bg-amber-200 text-amber-800"
+                  )}>
+                    {statusCounts.pending}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('preparing')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[36px]",
+                    statusFilter === 'preparing'
+                      ? "bg-blue-600 text-white shadow-xs"
+                      : "bg-blue-50 text-blue-700 border border-blue-200/60 hover:bg-blue-100"
+                  )}
+                >
+                  <ChefHat className="w-3 h-3" />
+                  Preparando
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    statusFilter === 'preparing' ? "bg-white/30 text-white" : "bg-blue-200 text-blue-800"
+                  )}>
+                    {statusCounts.preparing}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('ready')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[36px]",
+                    statusFilter === 'ready'
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-emerald-50 text-emerald-800 border border-emerald-200/60 hover:bg-emerald-100"
+                  )}
+                >
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  Prontos!
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    statusFilter === 'ready' ? "bg-white/30 text-white" : "bg-emerald-200 text-emerald-900"
+                  )}>
+                    {statusCounts.ready}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('delivered')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[36px]",
+                    statusFilter === 'delivered'
+                      ? "bg-teal-700 text-white shadow-xs"
+                      : "bg-teal-50 text-teal-700 border border-teal-200/60 hover:bg-teal-100"
+                  )}
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                  Entregues
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    statusFilter === 'delivered' ? "bg-white/30 text-white" : "bg-teal-200 text-teal-800"
+                  )}>
+                    {statusCounts.delivered}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('cancelled')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[36px]",
+                    statusFilter === 'cancelled'
+                      ? "bg-neutral-600 text-white shadow-xs"
+                      : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
+                  )}
+                >
+                  <X className="w-3 h-3" />
+                  Cancelados
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    statusFilter === 'cancelled' ? "bg-white/30 text-white" : "bg-neutral-200 text-neutral-700"
+                  )}>
+                    {statusCounts.cancelled}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReminderOrderId(null);
+                    setIsRemindersModalOpen(true);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[36px] cursor-pointer",
+                    pendingOrdersOver48h.length > 0
+                      ? "bg-rose-50 text-rose-800 border border-rose-300 hover:bg-rose-100 shadow-2xs"
+                      : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200"
+                  )}
+                  title="Agendador de Lembretes Automáticos (> 48h pendentes)"
+                >
+                  <Clock className="w-3 h-3 text-rose-600" />
+                  Lembretes 48h
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-black",
+                    pendingOrdersOver48h.length > 0 ? "bg-rose-200 text-rose-900" : "bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200"
+                  )}>
+                    {pendingOrdersOver48h.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Status filter reset if not 'all' */}
+              {statusFilter !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className="text-[10px] font-bold text-neutral-400 hover:text-brand-wine underline shrink-0 self-end sm:self-center"
+                >
+                  Limpar filtro de status
+                </button>
+              )}
+            </div>
+
+            {/* Period Filters & Export Buttons */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-1">
+              {/* Period Filters */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase text-neutral-400 mr-1">Período:</span>
+                {(['all', 'week', 'month', 'year', 'trash'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPeriodFilter(p)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-1.5 min-h-[34px]",
+                      periodFilter === p 
+                        ? "bg-brand-gold text-brand-wine border-brand-gold shadow-sm font-black" 
+                        : (p === 'trash' ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-neutral-50 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100")
+                    )}
+                  >
+                    {p === 'trash' && <Trash2 className="w-3 h-3" />}
+                    {p === 'all' ? 'Tudo' : p === 'week' ? 'Semana' : p === 'month' ? 'Mês' : p === 'year' ? 'Ano' : 'Lixeira'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Item 4: Export Buttons (Excel .csv & Professional PDF) */}
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => exportSalesToCsv({
                     orders: filteredOrders,
                     productCosts,
                     ingredients,
@@ -2137,13 +2499,49 @@ function AdminView({
                     periodName: periodFilter === 'all' ? 'Geral Completo' : periodFilter === 'week' ? 'Última Semana' : periodFilter === 'month' ? 'Mês Atual' : periodFilter === 'year' ? 'Ano Atual' : 'Lixeira',
                     globalSettings
                   })}
-                  className="px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all"
-                  title="Exportar Demonstrativo de Resultado (DRE) e Balanço Consolidado em PDF"
+                  className="flex-1 sm:flex-initial px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-all min-h-[38px] active:scale-95"
+                  title="Exportar planilha compatível com Excel e Google Sheets"
                 >
-                  <FileText className="w-3.5 h-3.5 text-amber-200" />
-                  Fechamento DRE (PDF)
+                  <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                  <span>Excel (.csv)</span>
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => exportSalesToPdf({
+                    orders: filteredOrders,
+                    productCosts,
+                    ingredients,
+                    recipes,
+                    periodName: periodFilter === 'all' ? 'Geral Completo' : periodFilter === 'week' ? 'Última Semana' : periodFilter === 'month' ? 'Mês Atual' : periodFilter === 'year' ? 'Ano Atual' : 'Lixeira',
+                    globalSettings
+                  })}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 bg-brand-wine hover:bg-black text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-all min-h-[38px] active:scale-95"
+                  title="Gerar Relatório Executivo e Financeiro em PDF"
+                >
+                  <Download className="w-3.5 h-3.5 shrink-0" />
+                  <span>PDF Relatório</span>
+                </button>
+
+                {globalSettings.enableConsolidatedReports !== false && (
+                  <button
+                    type="button"
+                    onClick={() => exportConsolidatedDREClosingReportPdf({
+                      orders: filteredOrders,
+                      productCosts,
+                      ingredients,
+                      recipes,
+                      periodName: periodFilter === 'all' ? 'Geral Completo' : periodFilter === 'week' ? 'Última Semana' : periodFilter === 'month' ? 'Mês Atual' : periodFilter === 'year' ? 'Ano Atual' : 'Lixeira',
+                      globalSettings
+                    })}
+                    className="flex-1 sm:flex-initial px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-all min-h-[38px] active:scale-95"
+                    title="Exportar Demonstrativo de Resultado (DRE) e Balanço Consolidado em PDF"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                    <span>DRE (PDF)</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -2171,6 +2569,10 @@ function AdminView({
                   globalSettings={globalSettings}
                   onUpdateStatus={onUpdateStatus} 
                   onDeletePermanent={onDeletePermanent}
+                  onOpenScheduleReminder={(orderId) => {
+                    setSelectedReminderOrderId(orderId);
+                    setIsRemindersModalOpen(true);
+                  }}
                 />
               ))
             )}
@@ -2278,6 +2680,23 @@ function AdminView({
           onToggleAdminDarkMode={onToggleAdminDarkMode}
         />
       )}
+
+      {/* Modal de Agendamento & Disparo de Lembretes Automáticos (> 48h) */}
+      <AdminPendingRemindersModal
+        isOpen={isRemindersModalOpen}
+        onClose={() => {
+          setIsRemindersModalOpen(false);
+          setSelectedReminderOrderId(null);
+        }}
+        orders={orders}
+        globalSettings={globalSettings}
+        onSaveGlobalSettings={onUpdateSettings}
+        onScheduleSingle={scheduleOrder}
+        onScheduleBulk={scheduleBulk}
+        onCancelSchedule={cancelSchedule}
+        onDispatchWhatsApp={dispatchWhatsApp}
+        preSelectedOrderId={selectedReminderOrderId}
+      />
     </div>
   );
 }

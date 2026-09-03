@@ -12,20 +12,25 @@ import {
   Check,
   Star,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  Phone,
+  ChefHat,
+  BellRing
 } from 'lucide-react';
 import { Timestamp } from '../firebase';
 import { cn, formatCurrency } from '../lib/utils';
 import { generateOrderPdf } from '../lib/pdfGenerator';
 import { QuickReplyModal } from './QuickReplyModal';
+import { AdminReadyStatusModal } from './AdminReadyStatusModal';
 import { buildPostSaleReviewMessage } from '../lib/couponHelper';
 import { openWhatsAppWithMessage } from '../lib/quickRepliesHelper';
 
 interface AdminOrderCardProps {
   order: any;
   globalSettings?: any;
-  onUpdateStatus: (id: string, status: string) => void;
+  onUpdateStatus: (id: string, status: string, customMessage?: string, notifyPwa?: boolean) => void;
   onDeletePermanent: (id: string) => void;
+  onOpenScheduleReminder?: (orderId: string) => void;
 }
 
 export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
@@ -33,11 +38,14 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
   globalSettings,
   onUpdateStatus,
   onDeletePermanent,
+  onOpenScheduleReminder,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isQuickReplyOpen, setIsQuickReplyOpen] = useState(false);
+  const [isReadyModalOpen, setIsReadyModalOpen] = useState(false);
   const isCompleted = order.status === 'completed';
   const isReady = order.status === 'ready';
+  const isPreparing = order.status === 'preparing';
   const isDeleted = order.status === 'deleted';
 
   // Check if pending order has been waiting without update for >24 hours
@@ -59,6 +67,29 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
     if (!lastActivityMs) return false;
     const diffHours = (Date.now() - lastActivityMs) / (1000 * 60 * 60);
     return diffHours >= 24;
+  }, [order]);
+
+  const isPendingOver48h = useMemo(() => {
+    if (order.status !== 'pending') return false;
+    let lastActivityMs: number | null = null;
+    if (order.updatedAt?.toDate) {
+      lastActivityMs = order.updatedAt.toDate().getTime();
+    } else if (order.updatedAt?.seconds) {
+      lastActivityMs = order.updatedAt.seconds * 1000;
+    } else if (order.createdAt?.toDate) {
+      lastActivityMs = order.createdAt.toDate().getTime();
+    } else if (order.createdAt?.seconds) {
+      lastActivityMs = order.createdAt.seconds * 1000;
+    } else if (typeof order.createdAt === 'string') {
+      const parsed = new Date(order.createdAt).getTime();
+      if (!isNaN(parsed)) lastActivityMs = parsed;
+    } else if (order.date) {
+      const parsed = new Date(`${order.date}T${order.time || '12:00'}`).getTime();
+      if (!isNaN(parsed)) lastActivityMs = parsed;
+    }
+    if (!lastActivityMs) return false;
+    const diffHours = (Date.now() - lastActivityMs) / (1000 * 60 * 60);
+    return diffHours >= 48;
   }, [order]);
 
   const pendingHoursText = useMemo(() => {
@@ -127,6 +158,7 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
       "bg-white rounded-[24px] overflow-hidden border transition-all duration-300",
       isDeleted ? "border-red-100 bg-red-50/20" : (isCompleted ? "opacity-60 border-neutral-100 grayscale-[0.5]" : "border-neutral-100 shadow-sm hover:shadow-md"),
       isReady && !isDeleted && "ring-2 ring-emerald-500/20 border-emerald-500/30 shadow-emerald-100 shadow-lg",
+      isPreparing && !isDeleted && "ring-2 ring-amber-500/20 border-amber-400/40 bg-amber-50/10 shadow-amber-50 shadow-sm",
       isPendingOverdue && !isDeleted && "border-rose-300 ring-2 ring-rose-400/30 bg-rose-50/20 shadow-rose-100 shadow-md"
     )}>
       {/* Summary Section */}
@@ -134,6 +166,12 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-xl font-serif text-brand-wine italic">{order.customerName}</h3>
+            {(order.customerPhone || order.phone) && (
+              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
+                <Phone className="w-3 h-3 text-emerald-600" />
+                {order.customerPhone || order.phone}
+              </span>
+            )}
             <div className="flex items-center gap-1.5 flex-wrap">
               {order.status === 'pending' && !isPendingOverdue && (
                 <span className="text-[10px] font-black px-2 py-0.5 bg-brand-gold/10 text-brand-wine rounded-full border border-brand-gold/20">
@@ -146,12 +184,47 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                   PENDENTE HÁ +{pendingHoursText} ⚠️
                 </span>
               )}
-              {order.status === 'ready' && <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200">PRONTO!</span>}
+              {isPendingOver48h && (
+                <span className="text-[10px] font-black px-2.5 py-0.5 bg-rose-800 text-amber-200 rounded-full border border-rose-900 flex items-center gap-1 shadow-xs" title="Pedido pendente há mais de 48 horas! Recomenda-se agendar ou enviar lembrete ao cliente.">
+                  <Clock className="w-3 h-3 text-amber-300" />
+                  &gt; 48H PENDENTE
+                </span>
+              )}
+              {order.scheduledReminderStatus === 'scheduled' && order.scheduledReminderAt && (
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-full flex items-center gap-1" title={`Lembrete agendado para ${new Date(order.scheduledReminderAt).toLocaleString('pt-BR')}`}>
+                  <Clock className="w-3 h-3 text-amber-600" />
+                  Lembrete: {new Date(order.scheduledReminderAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} {new Date(order.scheduledReminderAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              {Boolean(order.reminderCount && order.reminderCount > 0) && (
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-100 text-teal-900 border border-teal-300 rounded-full flex items-center gap-1">
+                  <Check className="w-3 h-3 text-teal-600" />
+                  {order.reminderCount}x Lembrete(s)
+                </span>
+              )}
+              {order.status === 'preparing' && (
+                <span className="text-[10px] font-black px-2.5 py-0.5 bg-amber-100 text-amber-800 rounded-full border border-amber-300 flex items-center gap-1">
+                  <ChefHat className="w-3 h-3 text-amber-600" />
+                  PREPARANDO NA COZINHA
+                </span>
+              )}
+              {order.status === 'ready' && <span className="text-[10px] font-black px-2.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 font-bold flex items-center gap-1"><Sparkles className="w-3 h-3 text-emerald-600" /> PRONTO!</span>}
               {order.status === 'completed' && <span className="text-[10px] font-black px-2 py-0.5 bg-neutral-100 text-neutral-500 rounded-full border border-neutral-200">ENTREGUE</span>}
               {order.status === 'deleted' && <span className="text-[10px] font-black px-2 py-0.5 bg-red-100 text-red-600 rounded-full border border-red-200">EXCLUÍDO</span>}
             </div>
           </div>
           <p className="text-[10px] text-neutral-400 font-medium">#{order.id.slice(-6).toUpperCase()} {order.deletedAt && `• Excluído em: ${order.deletedAt.toDate().toLocaleDateString('pt-BR')}`}</p>
+          {order.customNotificationMessage && (
+            <div className="mt-1.5 p-2 bg-emerald-50/80 rounded-xl border border-emerald-200/60 text-xs text-emerald-900 flex items-start gap-1.5 max-w-xl">
+              <BellRing className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="leading-snug">
+                <span className="font-bold text-[9px] uppercase tracking-wider text-emerald-800">
+                  Notificação PWA enviada{order.statusNotificationAt ? ` (${order.statusNotificationAt})` : ''}:
+                </span>
+                <span className="italic text-[11px] text-emerald-950 font-medium block">"{order.customNotificationMessage}"</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-6">
@@ -237,7 +310,7 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                     <button
                       type="button"
                       onClick={handleDownloadPdf}
-                      className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-brand-wine text-[10px] font-black rounded-lg transition-all flex items-center gap-1.5 border border-neutral-200 shadow-sm"
+                      className="px-3 py-2.5 bg-neutral-100 hover:bg-neutral-200 text-brand-wine text-[11px] font-black rounded-xl transition-all flex items-center gap-1.5 border border-neutral-200 shadow-sm min-h-[42px] active:scale-95"
                       title="Baixar Pedido/Orçamento em PDF"
                     >
                       <Download className="w-3.5 h-3.5 text-brand-wine" />
@@ -248,7 +321,7 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsQuickReplyOpen(true)}
-                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                      className="px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-xl transition-all flex items-center gap-1.5 shadow-sm min-h-[42px] active:scale-95"
                       title="Enviar Resposta Rápida no WhatsApp"
                     >
                       <MessageSquare className="w-3.5 h-3.5" />
@@ -259,7 +332,7 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                     <button
                       type="button"
                       onClick={handleSendPostSaleReview}
-                      className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black rounded-lg transition-all flex items-center gap-1.5 shadow-sm"
+                      className="px-3 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-black rounded-xl transition-all flex items-center gap-1.5 shadow-sm min-h-[42px] active:scale-95"
                       title="Enviar Convite de Avaliação com Link de Feedback no WhatsApp"
                     >
                       <Star className="w-3.5 h-3.5 fill-white" />
@@ -272,26 +345,76 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                         <button 
                          type="button"
                          onClick={() => onUpdateStatus(order.id, 'deleted')}
-                         className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                         className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-all min-h-[42px] min-w-[42px] flex items-center justify-center active:scale-90"
                          title="Excluir (Mover para Lixeira)"
                         >
                           <Trash2 className="w-5 h-5" />
                         </button>
 
                         {order.status === 'pending' && (
+                          <>
+                            {onOpenScheduleReminder && (
+                              <button 
+                                type="button"
+                                onClick={() => onOpenScheduleReminder(order.id)}
+                                className={cn(
+                                  "px-3.5 py-2.5 text-[11px] font-black rounded-xl border transition-all flex items-center gap-1.5 min-h-[42px] active:scale-95 cursor-pointer shadow-xs",
+                                  isPendingOver48h
+                                    ? "bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100"
+                                    : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                                )}
+                                title="Agendar ou enviar lembrete amigável para este pedido pendente"
+                              >
+                                <Clock className="w-3.5 h-3.5 text-rose-600" />
+                                <span>{order.scheduledReminderStatus === 'scheduled' ? 'VER LEMBRETE' : 'AGENDAR LEMBRETE (48H)'}</span>
+                              </button>
+                            )}
+                            <button 
+                              type="button"
+                              onClick={() => onUpdateStatus(order.id, 'preparing')}
+                              className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 min-h-[42px] active:scale-95 cursor-pointer"
+                              title="Mudar status para Em Preparação na Cozinha"
+                            >
+                              <ChefHat className="w-3.5 h-3.5" /> INICIAR PREPARO
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => setIsReadyModalOpen(true)}
+                              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 min-h-[42px] active:scale-95 cursor-pointer"
+                              title="Marcar como Pronto e enviar notificação PWA customizada ao cliente"
+                            >
+                              <BellRing className="w-3.5 h-3.5" /> MARCAR COMO PRONTO
+                            </button>
+                          </>
+                        )}
+
+                        {order.status === 'preparing' && (
                           <button 
                             type="button"
-                            onClick={() => onUpdateStatus(order.id, 'ready')}
-                            className="px-4 py-2 bg-emerald-500 text-white text-[10px] font-black rounded-lg shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 transition-all flex items-center gap-2"
+                            onClick={() => setIsReadyModalOpen(true)}
+                            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-xl shadow-lg shadow-emerald-600/25 ring-2 ring-emerald-500/30 transition-all flex items-center gap-2 min-h-[42px] active:scale-95 cursor-pointer"
+                            title="Pronto! Enviar notificação customizada via PWA diretamente ao cliente"
                           >
-                            <Check className="w-3 h-3" /> MARCAR COMO PRONTO
+                            <BellRing className="w-4 h-4" /> MARCAR COMO PRONTO & NOTIFICAR
                           </button>
                         )}
-                        {(order.status === 'pending' || order.status === 'ready') && (
+
+                        {order.status === 'ready' && (
+                          <button 
+                            type="button"
+                            onClick={() => setIsReadyModalOpen(true)}
+                            className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-xl border border-emerald-300 transition-all flex items-center gap-1.5 min-h-[42px] active:scale-95 cursor-pointer"
+                            title="Editar mensagem de status e reenviar notificação PWA ao cliente"
+                          >
+                            <BellRing className="w-3.5 h-3.5 text-emerald-600" /> EDITAR NOTIFICAÇÃO PWA
+                          </button>
+                        )}
+
+                        {(order.status === 'pending' || order.status === 'preparing' || order.status === 'ready') && (
                           <button 
                             type="button"
                             onClick={() => onUpdateStatus(order.id, 'completed')}
-                            className="px-4 py-2 bg-brand-wine text-brand-gold text-[10px] font-black rounded-lg shadow-lg shadow-brand-wine/20 hover:bg-black transition-all"
+                            className="px-4 py-2.5 bg-brand-wine text-brand-gold text-[11px] font-black rounded-xl shadow-md shadow-brand-wine/20 hover:bg-black transition-all min-h-[42px] active:scale-95 cursor-pointer"
                           >
                             FINALIZAR ENTREGA
                           </button>
@@ -305,14 +428,14 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                         <button 
                          type="button"
                          onClick={() => onUpdateStatus(order.id, 'pending')}
-                         className="px-4 py-2 bg-brand-wine text-white text-[10px] font-black rounded-lg transition-all"
+                         className="px-4 py-2.5 bg-brand-wine text-white text-[11px] font-black rounded-xl transition-all min-h-[42px] active:scale-95"
                         >
                           RESTAURAR PEDIDO
                         </button>
                         <button 
                          type="button"
                          onClick={() => onDeletePermanent(order.id)}
-                         className="px-4 py-2 bg-red-600 text-white text-[10px] font-black rounded-lg transition-all"
+                         className="px-4 py-2.5 bg-red-600 text-white text-[11px] font-black rounded-xl transition-all min-h-[42px] active:scale-95"
                         >
                           EXCLUIR PERMANENTE
                         </button>
@@ -338,6 +461,19 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
           order={order}
           customPhrases={globalSettings?.quickReplyPhrases}
           globalSettings={globalSettings}
+        />
+      )}
+
+      {/* Admin Ready Status Modal with Custom Notification to PWA */}
+      {isReadyModalOpen && (
+        <AdminReadyStatusModal
+          isOpen={isReadyModalOpen}
+          onClose={() => setIsReadyModalOpen(false)}
+          order={order}
+          globalSettings={globalSettings}
+          onConfirm={(orderId, status, customMessage, notifyPwa) => {
+            onUpdateStatus(orderId, status, customMessage, notifyPwa);
+          }}
         />
       )}
     </div>
