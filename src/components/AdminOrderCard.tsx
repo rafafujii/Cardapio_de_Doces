@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShoppingBag, 
@@ -11,7 +11,8 @@ import {
   Trash2, 
   Check,
   Star,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import { Timestamp } from '../firebase';
 import { cn, formatCurrency } from '../lib/utils';
@@ -38,6 +39,50 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
   const isCompleted = order.status === 'completed';
   const isReady = order.status === 'ready';
   const isDeleted = order.status === 'deleted';
+
+  // Check if pending order has been waiting without update for >24 hours
+  const isPendingOverdue = useMemo(() => {
+    if (order.status !== 'pending') return false;
+    let lastActivityMs: number | null = null;
+    if (order.updatedAt?.toDate) {
+      lastActivityMs = order.updatedAt.toDate().getTime();
+    } else if (order.updatedAt?.seconds) {
+      lastActivityMs = order.updatedAt.seconds * 1000;
+    } else if (order.createdAt?.toDate) {
+      lastActivityMs = order.createdAt.toDate().getTime();
+    } else if (order.createdAt?.seconds) {
+      lastActivityMs = order.createdAt.seconds * 1000;
+    } else if (order.date) {
+      const parsed = new Date(`${order.date}T${order.time || '12:00'}`).getTime();
+      if (!isNaN(parsed)) lastActivityMs = parsed;
+    }
+    if (!lastActivityMs) return false;
+    const diffHours = (Date.now() - lastActivityMs) / (1000 * 60 * 60);
+    return diffHours >= 24;
+  }, [order]);
+
+  const pendingHoursText = useMemo(() => {
+    if (!isPendingOverdue) return null;
+    let lastActivityMs: number | null = null;
+    if (order.updatedAt?.toDate) {
+      lastActivityMs = order.updatedAt.toDate().getTime();
+    } else if (order.updatedAt?.seconds) {
+      lastActivityMs = order.updatedAt.seconds * 1000;
+    } else if (order.createdAt?.toDate) {
+      lastActivityMs = order.createdAt.toDate().getTime();
+    } else if (order.createdAt?.seconds) {
+      lastActivityMs = order.createdAt.seconds * 1000;
+    } else if (order.date) {
+      const parsed = new Date(`${order.date}T${order.time || '12:00'}`).getTime();
+      if (!isNaN(parsed)) lastActivityMs = parsed;
+    }
+    if (!lastActivityMs) return null;
+    const hours = Math.floor((Date.now() - lastActivityMs) / (1000 * 60 * 60));
+    if (hours >= 48) {
+      return `${Math.floor(hours / 24)} dias`;
+    }
+    return `${hours} horas`;
+  }, [isPendingOverdue, order]);
 
   const handleDownloadPdf = () => {
     generateOrderPdf({
@@ -81,15 +126,26 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
     <div className={cn(
       "bg-white rounded-[24px] overflow-hidden border transition-all duration-300",
       isDeleted ? "border-red-100 bg-red-50/20" : (isCompleted ? "opacity-60 border-neutral-100 grayscale-[0.5]" : "border-neutral-100 shadow-sm hover:shadow-md"),
-      isReady && !isDeleted && "ring-2 ring-emerald-500/20 border-emerald-500/30 shadow-emerald-100 shadow-lg"
+      isReady && !isDeleted && "ring-2 ring-emerald-500/20 border-emerald-500/30 shadow-emerald-100 shadow-lg",
+      isPendingOverdue && !isDeleted && "border-rose-300 ring-2 ring-rose-400/30 bg-rose-50/20 shadow-rose-100 shadow-md"
     )}>
       {/* Summary Section */}
       <div className="p-6 flex flex-wrap justify-between items-center gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-xl font-serif text-brand-wine italic">{order.customerName}</h3>
-            <div className="flex gap-1">
-              {order.status === 'pending' && <span className="text-[10px] font-black px-2 py-0.5 bg-brand-gold/10 text-brand-wine rounded-full border border-brand-gold/20">PENDENTE</span>}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {order.status === 'pending' && !isPendingOverdue && (
+                <span className="text-[10px] font-black px-2 py-0.5 bg-brand-gold/10 text-brand-wine rounded-full border border-brand-gold/20">
+                  PENDENTE
+                </span>
+              )}
+              {order.status === 'pending' && isPendingOverdue && (
+                <span className="text-[10px] font-black px-2.5 py-0.5 bg-rose-600 text-white rounded-full border border-rose-700 animate-pulse flex items-center gap-1 shadow-2xs" title={`Pedido pendente aguardando há mais de ${pendingHoursText} sem atualização!`}>
+                  <AlertTriangle className="w-3 h-3 text-amber-200" />
+                  PENDENTE HÁ +{pendingHoursText} ⚠️
+                </span>
+              )}
               {order.status === 'ready' && <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200">PRONTO!</span>}
               {order.status === 'completed' && <span className="text-[10px] font-black px-2 py-0.5 bg-neutral-100 text-neutral-500 rounded-full border border-neutral-200">ENTREGUE</span>}
               {order.status === 'deleted' && <span className="text-[10px] font-black px-2 py-0.5 bg-red-100 text-red-600 rounded-full border border-red-200">EXCLUÍDO</span>}

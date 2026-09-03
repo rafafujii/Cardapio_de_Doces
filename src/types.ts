@@ -152,8 +152,10 @@ export interface BatchPanCalculation {
 export interface AuditLogChange {
   field: string;
   fieldLabel: string;
+  category?: string;
   oldValue: any;
   newValue: any;
+  description?: string;
 }
 
 export interface AuditLog {
@@ -161,8 +163,12 @@ export interface AuditLog {
   action: string;
   userEmail: string;
   userName: string;
+  userIp?: string;
+  deviceInfo?: string;
+  category?: string;
   changedFields: AuditLogChange[];
   summary: string;
+  detailedDescription?: string;
   timestamp: any;
 }
 

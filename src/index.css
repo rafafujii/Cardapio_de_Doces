@@ -47,3 +47,121 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-brand-wine/20 rounded-full hover:bg-brand-wine/40 transition-colors;
 }
+
+/* ==========================================================================
+   ADMIN NIGHT MODE / DARK THEME (Redução de Cansaço Visual)
+   ========================================================================== */
+.admin-dark-mode-body {
+  background-color: #121012 !important;
+  color: #f5f0f3 !important;
+}
+
+.admin-dark {
+  color: #f5f0f3;
+  color-scheme: dark;
+}
+
+.admin-dark ::-webkit-scrollbar-track {
+  background: #181417;
+}
+
+.admin-dark ::-webkit-scrollbar-thumb {
+  background: #4a3c44;
+}
+
+.admin-dark .bg-white {
+  background-color: #1c181b !important;
+  border-color: #2e262a !important;
+  color: #f5f0f3 !important;
+}
+
+.admin-dark .bg-neutral-50 {
+  background-color: #241e22 !important;
+  border-color: #352c31 !important;
+  color: #e4dce0 !important;
+}
+
+.admin-dark .bg-neutral-100 {
+  background-color: #2a2327 !important;
+  border-color: #3d3339 !important;
+  color: #e4dce0 !important;
+}
+
+.admin-dark .bg-brand-cream,
+.admin-dark .bg-brand-cream\/30,
+.admin-dark .bg-brand-cream\/50 {
+  background-color: #191518 !important;
+}
+
+.admin-dark .border-neutral-100,
+.admin-dark .border-neutral-200 {
+  border-color: #332a2f !important;
+}
+
+.admin-dark .border-brand-wine\/5,
+.admin-dark .border-brand-wine\/10,
+.admin-dark .border-brand-wine\/20 {
+  border-color: rgba(252, 165, 165, 0.15) !important;
+}
+
+.admin-dark .text-neutral-900,
+.admin-dark .text-neutral-800 {
+  color: #f8f4f6 !important;
+}
+
+.admin-dark .text-neutral-700,
+.admin-dark .text-neutral-600 {
+  color: #d6ccce !important;
+}
+
+.admin-dark .text-neutral-500 {
+  color: #a4979c !important;
+}
+
+.admin-dark .text-neutral-400 {
+  color: #8c7f84 !important;
+}
+
+.admin-dark .text-neutral-300 {
+  color: #6d6166 !important;
+}
+
+.admin-dark h2.text-brand-wine,
+.admin-dark h3.text-brand-wine,
+.admin-dark h4.text-brand-wine {
+  color: #f8df93 !important;
+}
+
+.admin-dark p.text-brand-wine,
+.admin-dark span.text-brand-wine,
+.admin-dark button.text-brand-wine {
+  color: #fca5a5 !important;
+}
+
+.admin-dark input:not([type="checkbox"]):not([type="radio"]),
+.admin-dark select,
+.admin-dark textarea {
+  background-color: #251f23 !important;
+  color: #f5f0f3 !important;
+  border-color: #3e333a !important;
+}
+
+.admin-dark input::placeholder,
+.admin-dark textarea::placeholder {
+  color: #7b6f75 !important;
+}
+
+.admin-dark input:focus,
+.admin-dark select:focus,
+.admin-dark textarea:focus {
+  border-color: #d4af37 !important;
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2) !important;
+}
+
+.admin-dark .shadow-sm,
+.admin-dark .shadow-md,
+.admin-dark .shadow-lg,
+.admin-dark .shadow-xl {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5) !important;
+}
+

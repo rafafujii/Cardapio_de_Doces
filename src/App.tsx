@@ -58,15 +58,18 @@ import {
   AlertTriangle,
   Users,
   MessageSquare,
-  Tag
+  Tag,
+  Moon,
+  Sun
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn, formatCurrency, removeAcentos, getProductUnitPrice, cleanFirestoreData } from './lib/utils';
 import { generateOrderPdf } from './lib/pdfGenerator';
 import { exportSalesToCsv, exportSalesToPdf, exportConsolidatedDREClosingReportPdf } from './lib/exportReports';
 import { playNewOrderNotification } from './lib/audioNotifier';
+import { sendPwaOrderNotification } from './lib/pwaNotificationHelper';
 import { buildWhatsAppMessage, DEFAULT_WHATSAPP_TEMPLATE } from './lib/whatsappHelper';
-import { calculateSettingsDiff } from './lib/auditHelper';
+import { calculateSettingsDiff, getClientIpAndDeviceInfo, buildAuditDetailedDescription } from './lib/auditHelper';
 import { useWishlist } from './hooks/useWishlist';
 import { getSeasonalTheme } from './lib/seasonalThemes';
 import type { Product, CartItem, CategoryGroup, OrderDetails, ReadyBox, CustomerNoteData, QuickReplyPhrase, Coupon, AuditLog } from './types';
@@ -225,8 +228,42 @@ export function App() {
     customerName?: string;
   }>({ isOpen: false });
 
+  // Admin Dark Mode (Night Mode) persisted in localStorage
+  const [adminDarkMode, setAdminDarkMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('docesGourmetAdminDarkMode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleAdminDarkMode = React.useCallback(() => {
+    setAdminDarkMode(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('docesGourmetAdminDarkMode', String(next));
+      } catch (e) {
+        console.warn("Could not persist admin dark mode to localStorage", e);
+      }
+      return next;
+    });
+  }, []);
+
   const isAdmin = user?.email?.toLowerCase() === 'rafaelhirofujii17@gmail.com';
   const previousAdminOrdersCount = React.useRef<number | null>(null);
+
+  // Sync body class for dark background when in admin view
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (view === 'admin' && adminDarkMode) {
+      document.body.classList.add('admin-dark-mode-body');
+    } else {
+      document.body.classList.remove('admin-dark-mode-body');
+    }
+    return () => {
+      document.body.classList.remove('admin-dark-mode-body');
+    };
+  }, [view, adminDarkMode]);
 
   // Check URL params for review request (?avaliar=true&pedido=...&cliente=...)
   useEffect(() => {
@@ -282,15 +319,23 @@ export function App() {
         }, { merge: true });
       });
 
-      // Record audit log if changes were made
+      // Record audit log with client IP, Device Info and deep description if changes were made
       if (diff.length > 0) {
         try {
+          const { ip, deviceInfo } = await getClientIpAndDeviceInfo();
+          const detailedDescription = buildAuditDetailedDescription(diff);
+          const mainCategory = diff[0]?.category || 'Atendimento & Horários';
+
           await addDoc(collection(db, 'audit_logs'), {
             action: 'settings_updated',
             userEmail: user?.email || 'rafaelhirofujii17@gmail.com',
             userName: user?.displayName || user?.email?.split('@')[0] || 'Administrador',
+            userIp: ip,
+            deviceInfo: deviceInfo,
+            category: mainCategory,
             changedFields: diff,
             summary: diff.map(d => d.fieldLabel).slice(0, 3).join(', ') + (diff.length > 3 ? ` (+${diff.length - 3} alterações)` : ''),
+            detailedDescription,
             timestamp: serverTimestamp()
           });
         } catch (logErr) {
@@ -335,7 +380,7 @@ export function App() {
     return () => { isMounted = false; };
   }, [globalSettings.googleSheetId]);
 
-  // Orders Listener for Admin with Real-time Sound Notification (Item 4)
+  // Orders Listener for Admin with Real-time Sound & Background PWA Push Notification
   useEffect(() => {
     if (view === 'admin' && isAdmin) {
       setLoadingOrders(true);
@@ -348,10 +393,20 @@ export function App() {
         
         // Check if a new order arrived while in admin view
         if (previousAdminOrdersCount.current !== null && snapshot.docs.length > previousAdminOrdersCount.current) {
-          if (globalSettings.enableOrderSoundNotification) {
-            playNewOrderNotification();
-          }
-          sendBrowserNotification("S.E Doces Gourmet", "🔔 Novo pedido recebido no painel de administração!");
+          const newestDoc = snapshot.docs[0];
+          const newestOrder: any = newestDoc ? newestDoc.data() : null;
+          const customerName = newestOrder?.customerName || 'Novo Cliente';
+          const totalFormatted = newestOrder?.total ? ` • ${formatCurrency(newestOrder.total)}` : '';
+
+          sendPwaOrderNotification({
+            title: "🔔 Novo Pedido Recebido! • S.E Doces",
+            body: `Nova encomenda de ${customerName}${totalFormatted}. Toque para abrir a Área Administrativa.`,
+            orderId: newestDoc?.id,
+            customerName,
+            total: newestOrder?.total,
+            playSound: globalSettings.enableOrderSoundNotification,
+            vibrate: true
+          });
         }
         previousAdminOrdersCount.current = snapshot.docs.length;
 
@@ -1097,6 +1152,8 @@ export function App() {
         onOpenCart={() => setIsCartOpen(true)}
         instagramUrl={globalSettings.instagramUrl}
         enablePwaInstallPrompt={globalSettings.enablePwaInstallPrompt !== false}
+        adminDarkMode={adminDarkMode}
+        onToggleAdminDarkMode={handleToggleAdminDarkMode}
       />
 
       {/* Feature 5.2: Seasonal Theme Banner (when active) */}
@@ -1308,40 +1365,44 @@ export function App() {
             </div>
           </>
         ) : view === 'admin' ? (
-          <AdminView 
-            orders={adminOrders} 
-            loading={loadingOrders} 
-            onUpdateStatus={updateOrderStatus} 
-            onDeletePermanent={permanentlyDeleteOrder}
-            productCosts={productCosts}
-            onUpdateCost={updateProductCost}
-            ingredients={ingredients}
-            onUpdateIngredient={updateIngredient}
-            onDeleteIngredient={deleteIngredient}
-            recipes={recipes}
-            onUpdateRecipe={updateRecipe}
-            reviews={allReviews}
-            onModerateReview={moderateReview}
-            onDeleteReview={deleteReview}
-            onReplyReview={replyReview}
-            catalog={catalog}
-            globalSettings={globalSettings}
-            onUpdateSettings={updateGlobalSettings}
-            readyBoxes={readyBoxes}
-            onSaveReadyBox={handleSaveReadyBox}
-            onDeleteReadyBox={handleDeleteReadyBox}
-            onUpdateReadyBoxQuantity={handleUpdateReadyBoxQuantity}
-            onToggleReadyBoxActive={handleToggleReadyBoxActive}
-            customerNotes={customerNotes}
-            onSaveCustomerNotes={handleSaveCustomerNotes}
-            coupons={coupons}
-            onSaveCoupon={handleSaveCoupon}
-            onDeleteCoupon={handleDeleteCoupon}
-            onToggleCouponActive={handleToggleCouponActive}
-            auditLogs={auditLogs}
-            onDeleteAuditLog={deleteAuditLog}
-            onClearAuditLogs={clearAllAuditLogs}
-          />
+          <div className={cn("transition-colors duration-200", adminDarkMode && "admin-dark")}>
+            <AdminView 
+              orders={adminOrders} 
+              loading={loadingOrders} 
+              onUpdateStatus={updateOrderStatus} 
+              onDeletePermanent={permanentlyDeleteOrder}
+              productCosts={productCosts}
+              onUpdateCost={updateProductCost}
+              ingredients={ingredients}
+              onUpdateIngredient={updateIngredient}
+              onDeleteIngredient={deleteIngredient}
+              recipes={recipes}
+              onUpdateRecipe={updateRecipe}
+              reviews={allReviews}
+              onModerateReview={moderateReview}
+              onDeleteReview={deleteReview}
+              onReplyReview={replyReview}
+              catalog={catalog}
+              globalSettings={globalSettings}
+              onUpdateSettings={updateGlobalSettings}
+              readyBoxes={readyBoxes}
+              onSaveReadyBox={handleSaveReadyBox}
+              onDeleteReadyBox={handleDeleteReadyBox}
+              onUpdateReadyBoxQuantity={handleUpdateReadyBoxQuantity}
+              onToggleReadyBoxActive={handleToggleReadyBoxActive}
+              customerNotes={customerNotes}
+              onSaveCustomerNotes={handleSaveCustomerNotes}
+              coupons={coupons}
+              onSaveCoupon={handleSaveCoupon}
+              onDeleteCoupon={handleDeleteCoupon}
+              onToggleCouponActive={handleToggleCouponActive}
+              auditLogs={auditLogs}
+              onDeleteAuditLog={deleteAuditLog}
+              onClearAuditLogs={clearAllAuditLogs}
+              adminDarkMode={adminDarkMode}
+              onToggleAdminDarkMode={handleToggleAdminDarkMode}
+            />
+          </div>
         ) : (
           <TrackingView orders={myOrders} onBack={() => setView('catalog')} />
         )}
@@ -1585,7 +1646,9 @@ function AdminView({
   onToggleCouponActive,
   auditLogs = [],
   onDeleteAuditLog,
-  onClearAuditLogs
+  onClearAuditLogs,
+  adminDarkMode = false,
+  onToggleAdminDarkMode
 }: { 
   orders: any[], 
   loading: boolean, 
@@ -1618,12 +1681,48 @@ function AdminView({
   onToggleCouponActive?: (id: string, active: boolean) => Promise<void>,
   auditLogs?: AuditLog[],
   onDeleteAuditLog?: (id: string) => void,
-  onClearAuditLogs?: () => void
+  onClearAuditLogs?: () => void,
+  adminDarkMode?: boolean,
+  onToggleAdminDarkMode?: () => void
 }) {
   const [periodFilter, setPeriodFilter] = useState<'all' | 'week' | 'month' | 'year' | 'trash'>('all');
+  const [filterOverduePendingOnly, setFilterOverduePendingOnly] = useState(false);
   const [activeTab, setActiveTab] = useState<'orders' | 'production' | 'ready_boxes' | 'calculator' | 'crm' | 'coupons' | 'inventory' | 'quick_replies' | 'reviews' | 'settings'>('orders');
 
+  // Pending orders without updates for > 24 hours
+  const overduePendingOrders = useMemo(() => {
+    const now = Date.now();
+    return orders.filter(o => {
+      if (o.status !== 'pending') return false;
+      let lastActivityMs: number | null = null;
+      if (o.updatedAt?.toDate) {
+        lastActivityMs = o.updatedAt.toDate().getTime();
+      } else if (o.updatedAt?.seconds) {
+        lastActivityMs = o.updatedAt.seconds * 1000;
+      } else if (o.createdAt?.toDate) {
+        lastActivityMs = o.createdAt.toDate().getTime();
+      } else if (o.createdAt?.seconds) {
+        lastActivityMs = o.createdAt.seconds * 1000;
+      } else if (o.date) {
+        const parsed = new Date(`${o.date}T${o.time || '12:00'}`).getTime();
+        if (!isNaN(parsed)) lastActivityMs = parsed;
+      }
+      if (!lastActivityMs) return false;
+      const diffHours = (now - lastActivityMs) / (1000 * 60 * 60);
+      return diffHours >= 24;
+    });
+  }, [orders]);
+
+  useEffect(() => {
+    if (overduePendingOrders.length === 0 && filterOverduePendingOnly) {
+      setFilterOverduePendingOnly(false);
+    }
+  }, [overduePendingOrders.length, filterOverduePendingOnly]);
+
   const filteredOrders = useMemo(() => {
+    if (filterOverduePendingOnly) {
+      return overduePendingOrders;
+    }
     const now = new Date();
     return orders.filter(order => {
       if (periodFilter === 'trash') {
@@ -1645,7 +1744,7 @@ function AdminView({
       }
       return true;
     });
-  }, [orders, periodFilter]);
+  }, [orders, periodFilter, filterOverduePendingOnly, overduePendingOrders]);
 
   const stats = useMemo(() => {
     const activeOrders = orders.filter(o => o.status !== 'deleted');
@@ -1695,7 +1794,34 @@ function AdminView({
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="space-y-1">
-          <h2 className="text-3xl font-serif text-brand-wine italic font-bold">Área Administrativa</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-3xl font-serif text-brand-wine italic font-bold">Área Administrativa</h2>
+            {onToggleAdminDarkMode && (
+              <button
+                type="button"
+                onClick={onToggleAdminDarkMode}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 transition-all shadow-sm cursor-pointer",
+                  adminDarkMode 
+                    ? "bg-amber-400/20 text-amber-300 border-amber-400/40 hover:bg-amber-400/30" 
+                    : "bg-neutral-100 text-neutral-700 border-neutral-200 hover:bg-neutral-200"
+                )}
+                title={adminDarkMode ? "Alternar para Modo Diurno" : "Ativar Modo Noturno (Reduz o cansaço visual)"}
+              >
+                {adminDarkMode ? (
+                  <>
+                    <Sun className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">Modo Noite</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-600">Modo Noite</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
           <p className="text-neutral-500 text-sm">Gerencie pedidos, produção, pronta entrega, lucratividade e clientes.</p>
         </div>
         
@@ -1703,7 +1829,10 @@ function AdminView({
         <div className="flex flex-wrap p-1.5 bg-neutral-100 rounded-2xl gap-1">
           <button 
             type="button"
-            onClick={() => setActiveTab('orders')}
+            onClick={() => {
+              setActiveTab('orders');
+              if (filterOverduePendingOnly) setFilterOverduePendingOnly(false);
+            }}
             className={cn(
               "px-3.5 sm:px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
               activeTab === 'orders' ? "bg-white text-brand-wine shadow-sm" : "text-neutral-400 hover:text-neutral-600"
@@ -1711,6 +1840,15 @@ function AdminView({
           >
             <Package className="w-3.5 h-3.5" />
             Pedidos ({orders.filter(o => o.status !== 'deleted').length})
+            {overduePendingOrders.length > 0 && (
+              <span 
+                className="px-1.5 py-0.5 bg-rose-600 text-white font-black text-[9px] rounded-full animate-pulse flex items-center gap-0.5 shadow-xs"
+                title={`${overduePendingOrders.length} pedido(s) pendente(s) há mais de 24h sem atualização`}
+              >
+                <AlertTriangle className="w-2.5 h-2.5 text-amber-200" />
+                {overduePendingOrders.length}
+              </span>
+            )}
           </button>
 
           <button 
@@ -1855,6 +1993,80 @@ function AdminView({
 
       {activeTab === 'orders' && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+          {/* Alerta Visual: Pedidos Pendentes há mais de 24h sem atualização */}
+          {overduePendingOrders.length > 0 && (
+            <div className="p-5 bg-gradient-to-r from-rose-50 via-amber-50/70 to-rose-50 border-2 border-rose-400/80 rounded-3xl shadow-sm space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3.5">
+                  <div className="p-3 bg-rose-600 text-white rounded-2xl shadow-md shrink-0 animate-bounce">
+                    <AlertTriangle className="w-6 h-6 text-amber-200" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-rose-950 text-base sm:text-lg flex items-center gap-2">
+                        <span>Atenção:</span>
+                        <span className="text-rose-600 underline decoration-rose-400 underline-offset-4">
+                          {overduePendingOrders.length} {overduePendingOrders.length === 1 ? 'pedido pendente' : 'pedidos pendentes'}
+                        </span>
+                        <span>sem atualização há mais de 24 horas!</span>
+                      </h4>
+                      <span className="px-2.5 py-0.5 bg-rose-200 text-rose-900 text-[10px] font-black uppercase tracking-wider rounded-full border border-rose-300 shadow-2xs">
+                        Prioridade de Atendimento
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-900/80 max-w-3xl">
+                      Estes clientes enviaram o pedido e ainda não receberam confirmação ou mudança de status há mais de 24 horas. Verifique para garantir que nenhum cliente fique sem resposta!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setFilterOverduePendingOnly(prev => !prev)}
+                    className={cn(
+                      "px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm flex items-center gap-2",
+                      filterOverduePendingOnly 
+                        ? "bg-rose-950 text-white hover:bg-black ring-2 ring-rose-400" 
+                        : "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30"
+                    )}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
+                    <span>{filterOverduePendingOnly ? "Ver Todos os Pedidos" : `Filtrar (${overduePendingOrders.length}) Urgentes`}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Lista dos clientes aguardando há mais de 24 horas */}
+              <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-rose-200/70">
+                <span className="text-[11px] font-black text-rose-900 uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-rose-600" />
+                  Aguardando resposta:
+                </span>
+                {overduePendingOrders.map(o => {
+                  let hoursAgo = 24;
+                  const lastMs = o.updatedAt?.toDate ? o.updatedAt.toDate().getTime() 
+                    : o.updatedAt?.seconds ? o.updatedAt.seconds * 1000 
+                    : o.createdAt?.toDate ? o.createdAt.toDate().getTime()
+                    : o.createdAt?.seconds ? o.createdAt.seconds * 1000
+                    : Date.now() - 24 * 3600 * 1000;
+                  hoursAgo = Math.floor((Date.now() - lastMs) / (3600 * 1000));
+                  return (
+                    <span 
+                      key={o.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/95 border border-rose-200/90 rounded-xl text-xs text-rose-950 font-bold shadow-2xs"
+                    >
+                      <span>{o.customerName || 'Cliente'}</span>
+                      <span className="text-[10px] text-rose-700 font-black bg-rose-100/90 px-1.5 py-0.5 rounded-md border border-rose-200">
+                        {hoursAgo >= 48 ? `${Math.floor(hoursAgo / 24)}d atrás` : `+${hoursAgo}h atrás`}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Action Bar: Period Filters + Export Buttons (Item 4) */}
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-neutral-100 shadow-sm">
             {/* Period Filters */}
@@ -2062,6 +2274,8 @@ function AdminView({
           auditLogs={auditLogs}
           onDeleteLog={onDeleteAuditLog}
           onClearLogs={onClearAuditLogs}
+          adminDarkMode={adminDarkMode}
+          onToggleAdminDarkMode={onToggleAdminDarkMode}
         />
       )}
     </div>
