@@ -63,6 +63,7 @@ import {
   FIRESTORE_COLLECTIONS,
   type FullFirestoreBackup 
 } from '../lib/firestoreBackupHelper';
+import { PWAStatusManager } from './PWAUpdatePrompt';
 import { SEASONAL_THEME_LIST } from '../lib/seasonalThemes';
 import { FormField } from './FormField';
 import { auth } from '../firebase';
@@ -630,6 +631,9 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Sincronização & Atualizações do App PWA */}
+            <PWAStatusManager />
           </div>
 
           {/* Seção 5: Mensagem Padrão de WhatsApp Pré-formatada */}

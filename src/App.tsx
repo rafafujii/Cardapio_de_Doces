@@ -127,6 +127,7 @@ import { AdminCouponsTab } from './components/AdminCouponsTab';
 import { CouponBanner } from './components/CouponBanner';
 import { CustomerReviewModal } from './components/CustomerReviewModal';
 import { AdminPendingRemindersModal } from './components/AdminPendingRemindersModal';
+import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { useAutoReminders } from './hooks/useAutoReminders';
 import { DEFAULT_48H_REMINDER_TEMPLATE, isOrderPendingOver48h } from './lib/reminderHelper';
 
@@ -2697,6 +2698,9 @@ function AdminView({
         onDispatchWhatsApp={dispatchWhatsApp}
         preSelectedOrderId={selectedReminderOrderId}
       />
+
+      {/* Notificação Flutuante de Nova Versão PWA Disponível */}
+      <PWAUpdatePrompt />
     </div>
   );
 }

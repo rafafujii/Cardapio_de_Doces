@@ -1,6 +1,7 @@
 import React from 'react';
 import { Instagram, LogIn, LogOut } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { PWAStatusManager } from './PWAUpdatePrompt';
 
 interface AppFooterProps {
   user: FirebaseUser | null;
@@ -36,6 +37,10 @@ export const AppFooter: React.FC<AppFooterProps> = ({
         <div className="pt-12 border-t border-white/10 flex flex-col items-center gap-4">
           <div className="text-[10px] tracking-widest font-medium text-white/40 uppercase">
             © {new Date().getFullYear()} S.E DOCES GOURMET • TODOS OS DIREITOS RESERVADOS
+          </div>
+
+          <div className="flex items-center gap-4">
+            <PWAStatusManager variant="compact" className="text-white/40 hover:text-brand-gold" />
           </div>
           
           {!user ? (
