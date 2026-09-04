@@ -13,17 +13,27 @@ import {
   Store, 
   Bike, 
   MessageSquare,
-  ShoppingBag
+  ShoppingBag,
+  Star
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
+import { OrderRatingCard } from './OrderRatingCard';
 
 interface TrackingViewProps {
   orders: any[];
   onBack: () => void;
   globalSettings?: any;
+  onRatingSubmitted?: (orderId: string, rating: number, comment: string) => void;
+  highlightOrderId?: string;
 }
 
-export const TrackingView: React.FC<TrackingViewProps> = ({ orders, onBack, globalSettings }) => {
+export const TrackingView: React.FC<TrackingViewProps> = ({ 
+  orders, 
+  onBack, 
+  globalSettings,
+  onRatingSubmitted,
+  highlightOrderId
+}) => {
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
 
   const toggleExpand = (orderId: string) => {
@@ -258,6 +268,20 @@ export const TrackingView: React.FC<TrackingViewProps> = ({ orders, onBack, glob
                         </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* FEATURE: Rating & Feedback Component for Delivered Order */}
+                  {isCompleted && (
+                    <OrderRatingCard
+                      order={order}
+                      globalSettings={globalSettings}
+                      isNewlyDelivered={highlightOrderId === order.id}
+                      onRatingSubmitted={(orderId, rating, comment) => {
+                        if (onRatingSubmitted) {
+                          onRatingSubmitted(orderId, rating, comment);
+                        }
+                      }}
+                    />
                   )}
 
                   {/* Toggle Items Expand */}

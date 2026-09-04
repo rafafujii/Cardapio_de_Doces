@@ -66,6 +66,7 @@ import {
 import { PWAStatusManager } from './PWAUpdatePrompt';
 import { SEASONAL_THEME_LIST } from '../lib/seasonalThemes';
 import { FormField } from './FormField';
+import { AdminVerifiedPhonesModal } from './AdminVerifiedPhonesModal';
 import { auth } from '../firebase';
 import type { AuditLog } from '../types';
 
@@ -128,9 +129,12 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
     autoReminder48hEnabled: false,
     autoReminder48hTime: '10:00',
     autoReminder48hTemplate: DEFAULT_48H_REMINDER_TEMPLATE,
+    // Verificação Obrigatória de WhatsApp na 1ª compra
+    requirePhoneVerification: true,
     ...settings
   });
 
+  const [isVerifiedPhonesModalOpen, setIsVerifiedPhonesModalOpen] = useState(false);
   const [newBlockedDate, setNewBlockedDate] = useState('');
   const [logSearchTerm, setLogSearchTerm] = useState('');
   const [logCategoryFilter, setLogCategoryFilter] = useState<string>('all');
@@ -1080,6 +1084,50 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
                   )}
                 </button>
               </div>
+
+              {/* Toggle 6: Proteção Anti-Trote via WhatsApp Real */}
+              <div className={cn(
+                "p-4 rounded-2xl border transition-all flex items-start justify-between gap-3 md:col-span-2",
+                formData.requirePhoneVerification !== false ? "bg-emerald-50/40 border-emerald-200/70" : "bg-neutral-50 border-neutral-200"
+              )}>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ShieldCheck className={cn("w-4 h-4", formData.requirePhoneVerification !== false ? "text-emerald-600" : "text-neutral-400")} />
+                    <span className="text-xs font-bold text-neutral-800">Proteção Anti-Trote: Confirmação Obrigatória pelo WhatsApp (Custo Zero)</span>
+                    <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                      100% Gratuito
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-500 leading-tight">
+                    O pedido só entra na produção da cozinha quando o cliente clica em "Enviar Pedido via WhatsApp" e você recebe a mensagem dele. Impede trotes, telefones falsos e não tem custo com SMS.
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setIsVerifiedPhonesModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Gerenciar Histórico de Telefones Confiáveis</span>
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, requirePhoneVerification: formData.requirePhoneVerification === false ? true : false })}
+                  className={cn(
+                    "p-1 rounded-full transition-colors shrink-0",
+                    formData.requirePhoneVerification !== false ? "text-emerald-600" : "text-neutral-300"
+                  )}
+                  title={formData.requirePhoneVerification !== false ? "Desativar Verificação" : "Ativar Verificação"}
+                >
+                  {formData.requirePhoneVerification !== false ? (
+                    <ToggleRight className="w-8 h-8 text-emerald-600 fill-emerald-600/20" />
+                  ) : (
+                    <ToggleLeft className="w-8 h-8 text-neutral-400" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1649,6 +1697,12 @@ export const AdminSettingsTab: React.FC<AdminSettingsTabProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal de Gestão de Telefones Verificados */}
+      <AdminVerifiedPhonesModal
+        isOpen={isVerifiedPhonesModalOpen}
+        onClose={() => setIsVerifiedPhonesModalOpen(false)}
+      />
     </div>
   );
 };

@@ -21,7 +21,8 @@ import {
   Store,
   Tag,
   Gift,
-  Phone
+  Phone,
+  CheckCircle2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn, formatCurrency, getProductUnitPrice } from '../lib/utils';
@@ -29,6 +30,10 @@ import { generateOrderPdf } from '../lib/pdfGenerator';
 import type { CartItem, OrderDetails, Coupon } from '../types';
 import { validateCoupon } from '../lib/couponHelper';
 import { buildWhatsAppMessage } from '../lib/whatsappHelper';
+import { 
+  cleanPhoneDigits, 
+  formatBrazilianPhone 
+} from '../lib/phoneVerificationHelper';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -54,6 +59,7 @@ interface CheckoutModalProps {
   onApplyCoupon?: (code: string) => void;
   onRemoveCoupon?: () => void;
   enableCoupons?: boolean;
+  requirePhoneVerification?: boolean;
   onOrderCompleted: (orderDetails: OrderDetails) => void;
 }
 
@@ -83,6 +89,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onApplyCoupon,
   onRemoveCoupon,
   enableCoupons = true,
+  requirePhoneVerification = true,
   onOrderCompleted
 }) => {
   // Calculate earliest available date based on admin minNoticeHours
@@ -105,6 +112,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     deliveryFee: 0,
     discountAmount: 0
   });
+
+  const [submittedOrderInfo, setSubmittedOrderInfo] = useState<{
+    whatsappUrl: string;
+    customerName: string;
+    total: number;
+  } | null>(null);
 
   const [errors, setErrors] = useState<{ name?: string; phone?: string; date?: string; time?: string; deliveryAddress?: string }>({});
   const [copiedPix, setCopiedPix] = useState(false);
@@ -211,11 +224,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
 
     if (!details.phone?.trim()) {
-      newErrors.phone = 'Informe seu telefone/WhatsApp para atualizações do pedido.';
+      newErrors.phone = 'Informe seu telefone/WhatsApp obrigatório para segurança do pedido.';
     } else {
-      const cleanPhone = details.phone.replace(/\D/g, '');
+      const cleanPhone = cleanPhoneDigits(details.phone);
       if (cleanPhone.length < 10) {
-        newErrors.phone = 'Telefone inválido (insira DDD + número, ex: 11 99999-9999).';
+        newErrors.phone = 'Telefone inválido (insira DDD + número, ex: 44 99999-9999).';
       }
     }
 
@@ -263,11 +276,35 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     // Fire Confetti
     confetti({
-      particleCount: 160,
-      spread: 80,
-      origin: { y: 0.6 },
-      colors: ['#800020', '#D4AF37', '#ffffff', '#F3E5AB']
+      particleCount: 180,
+      spread: 90,
+      origin: { y: 0.55 },
+      colors: ['#800020', '#D4AF37', '#10B981', '#F3E5AB']
     });
+
+    const itemsList = Object.values(cart) as CartItem[];
+    const message = buildWhatsAppMessage({
+      orderDetails: {
+        ...details,
+        deliveryFee: currentDeliveryFee,
+        discountAmount,
+        couponCode: couponValidation?.valid ? appliedCouponCode : undefined,
+        couponDiscount
+      },
+      items: itemsList,
+      cartSubtotal: cartTotal,
+      finalTotal,
+      discountAmount,
+      couponCode: couponValidation?.valid ? appliedCouponCode : undefined,
+      couponDiscount,
+      deliveryFee: currentDeliveryFee,
+      pickupAddress,
+      pixKey,
+      template: customWhatsAppTemplate
+    });
+
+    const cleanContact = cleanPhoneDigits(contactPhone || '5544998542446');
+    const whatsappUrl = `https://wa.me/${cleanContact}?text=${encodeURIComponent(message)}`;
 
     onOrderCompleted({
       ...details,
@@ -275,6 +312,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       discountAmount,
       couponCode: couponValidation?.valid ? appliedCouponCode : undefined,
       couponDiscount
+    });
+
+    setSubmittedOrderInfo({
+      whatsappUrl,
+      customerName: details.name,
+      total: finalTotal
     });
     setIsSubmitting(false);
   };
@@ -287,6 +330,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
     if (!details.phone?.trim()) {
       newErrors.phone = 'Informe seu telefone/WhatsApp antes de copiar a mensagem.';
+    } else {
+      const cleanPhone = cleanPhoneDigits(details.phone);
+      if (cleanPhone.length < 10) {
+        newErrors.phone = 'Telefone inválido (insira DDD + número, ex: 44 99999-9999).';
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -496,43 +544,45 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               )}
             </div>
 
-            {/* Customer Phone (WhatsApp) */}
+            {/* Customer Phone (WhatsApp) with Anti-Trote Protection */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
-                  <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                  Telefone / WhatsApp *
+                  <Phone className="w-3.5 h-3.5 text-brand-wine" />
+                  Seu WhatsApp com DDD *
                 </label>
-                <span className="text-[10px] text-neutral-400 font-medium">
-                  Para confirmação & avisos
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  Confirmação Direta
                 </span>
               </div>
               <input
                 type="tel"
-                placeholder="(DDD) 99999-9999"
+                placeholder="(44) 99999-9999"
+                maxLength={15}
                 className={cn(
-                  "w-full p-3.5 bg-neutral-50 border rounded-2xl focus:outline-none transition-all text-sm font-mono sm:font-sans",
+                  "w-full p-3.5 bg-neutral-50 border rounded-2xl focus:outline-none transition-all text-sm font-medium",
                   errors.phone
                     ? "border-red-500 ring-2 ring-red-100"
-                    : "border-neutral-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10"
+                    : "border-neutral-200 focus:border-brand-wine focus:ring-2 focus:ring-brand-wine/10"
                 )}
                 value={details.phone || ''}
                 onChange={(e) => {
-                  // Format as user types
-                  let v = e.target.value.replace(/\D/g, '');
-                  if (v.length > 11) v = v.slice(0, 11);
-                  let formatted = v;
-                  if (v.length > 2) formatted = `(${v.slice(0, 2)}) ${v.slice(2)}`;
-                  if (v.length > 7) formatted = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
-                  
+                  const formatted = formatBrazilianPhone(e.target.value);
                   setDetails((prev) => ({ ...prev, phone: formatted }));
                   if (errors.phone) setErrors((prev) => ({ ...prev, phone: undefined }));
                 }}
               />
-              {errors.phone && (
+              {errors.phone ? (
                 <p className="text-xs text-red-600 flex items-center gap-1 font-medium pl-1">
                   <AlertCircle className="w-3 h-3" /> {errors.phone}
                 </p>
+              ) : (
+                <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-start gap-2 text-[11px] text-emerald-900 leading-snug">
+                  <span className="text-base leading-none">🛡️</span>
+                  <span>
+                    <strong>Segurança da Encomenda:</strong> Ao clicar no botão abaixo, seu WhatsApp abrirá com o pedido pronto. A cozinha inicia o preparo assim que receber sua mensagem!
+                  </span>
+                </div>
               )}
             </div>
 

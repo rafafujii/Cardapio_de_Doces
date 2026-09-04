@@ -36,6 +36,36 @@ export interface OrderDetails {
   isReadyBoxOrder?: boolean;
 }
 
+export interface Order {
+  id: string;
+  customerName: string;
+  customerPhone?: string;
+  date: string;
+  time: string;
+  items: any[];
+  total: number;
+  paymentMethod: string;
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'delivered' | 'cancelled' | 'deleted';
+  deliveryType?: 'pickup' | 'delivery';
+  deliveryAddress?: string;
+  deliveryFee?: number;
+  notes?: string;
+  customNotificationMessage?: string;
+  statusNotificationAt?: string;
+  statusNotificationDate?: string;
+  rating?: number;
+  reviewComment?: string;
+  reviewedAt?: any;
+  createdAt?: any;
+  updatedAt?: any;
+  deletedAt?: any;
+  origin?: string;
+  isManualOrder?: boolean;
+  scheduledReminderStatus?: string;
+  scheduledReminderAt?: string;
+  reminderCount?: number;
+}
+
 export interface Coupon {
   id?: string;
   code: string;
@@ -218,6 +248,16 @@ export interface GlobalSettingsState {
   autoReminder48hEnabled?: boolean;
   autoReminder48hTime?: string;
   autoReminder48hTemplate?: string;
+  // Verificação Obrigatória de WhatsApp / Telefone na 1ª compra
+  requirePhoneVerification?: boolean;
+}
+
+export interface VerifiedPhoneRecord {
+  phone: string;
+  customerName?: string;
+  verifiedAt: any;
+  verifiedBy?: 'otp_code' | 'whatsapp_handshake' | 'admin_manual';
+  notes?: string;
 }
 
 export interface ScheduledReminderRecord {

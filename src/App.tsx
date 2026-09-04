@@ -129,6 +129,7 @@ import { CouponBanner } from './components/CouponBanner';
 import { CustomerReviewModal } from './components/CustomerReviewModal';
 import { AdminPendingRemindersModal } from './components/AdminPendingRemindersModal';
 import { AdminManualOrderModal } from './components/AdminManualOrderModal';
+import { AdminVerifiedPhonesModal } from './components/AdminVerifiedPhonesModal';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { useAutoReminders } from './hooks/useAutoReminders';
 import { DEFAULT_48H_REMINDER_TEMPLATE, isOrderPendingOver48h } from './lib/reminderHelper';
@@ -224,7 +225,8 @@ export function App() {
     seasonalThemeBanner: '',
     autoReminder48hEnabled: false,
     autoReminder48hTime: '10:00',
-    autoReminder48hTemplate: DEFAULT_48H_REMINDER_TEMPLATE
+    autoReminder48hTemplate: DEFAULT_48H_REMINDER_TEMPLATE,
+    requirePhoneVerification: true
   });
 
   const { wishlistIds, isWishlisted, toggleWishlist } = useWishlist();
@@ -239,6 +241,13 @@ export function App() {
     orderId?: string;
     customerName?: string;
   }>({ isOpen: false });
+
+  // Floating prompt when customer's order is marked as delivered
+  const [deliveredOrderPrompt, setDeliveredOrderPrompt] = useState<{
+    orderId: string;
+    customerName: string;
+  } | null>(null);
+  const [highlightTrackingOrderId, setHighlightTrackingOrderId] = useState<string | undefined>(undefined);
 
   // Admin Dark Mode (Night Mode) persisted in localStorage
   const [adminDarkMode, setAdminDarkMode] = useState<boolean>(() => {
@@ -463,11 +472,21 @@ export function App() {
 
             if (statusChanged || messageChanged) {
               const customMsg = updated.customNotificationMessage;
+              const isDelivered = updated.status === 'completed' || updated.status === 'delivered';
+              
+              if (statusChanged && isDelivered) {
+                setDeliveredOrderPrompt({
+                  orderId: updated.id,
+                  customerName: updated.customerName || 'Cliente'
+                });
+                setHighlightTrackingOrderId(updated.id);
+              }
+
               const statusMsg = 
                 updated.status === 'confirmed' ? (customMsg || "Seu pedido foi confirmado pela confeitaria! 🎉") :
                 updated.status === 'preparing' ? (customMsg || "Seus doces já estão sendo preparados com carinho! 🍫") :
                 updated.status === 'ready' ? (customMsg || "Seu pedido de doces gourmet está pronto para retirada! 🛍️✨") :
-                updated.status === 'completed' ? (customMsg || "Seu pedido foi entregue. Muito obrigado! ❤️") : (customMsg || "");
+                isDelivered ? (customMsg || "Seu pedido foi entregue! 🍬❤️ Deixe uma avaliação rápida de 1 a 5 estrelas!") : (customMsg || "");
 
               if (statusMsg) {
                 sendPwaOrderNotification({
@@ -1605,7 +1624,18 @@ export function App() {
             />
           </div>
         ) : (
-          <TrackingView orders={myOrders} onBack={() => setView('catalog')} globalSettings={globalSettings} />
+          <TrackingView 
+            orders={myOrders} 
+            onBack={() => setView('catalog')} 
+            globalSettings={globalSettings} 
+            highlightOrderId={highlightTrackingOrderId}
+            onRatingSubmitted={(orderId, rating, comment) => {
+              setMyOrders(prev => prev.map(o => o.id === orderId ? { ...o, rating, reviewComment: comment, reviewedAt: new Date().toISOString() } : o));
+              if (deliveredOrderPrompt?.orderId === orderId) {
+                setDeliveredOrderPrompt(null);
+              }
+            }}
+          />
         )}
       </main>
 
@@ -1748,6 +1778,7 @@ export function App() {
               else localStorage.removeItem('docesGourmetCoupon');
             }}
             enableCoupons={globalSettings.enableCoupons}
+            requirePhoneVerification={globalSettings.requirePhoneVerification !== false}
             onOrderCompleted={handleOrderCompleted}
           />
         )}
@@ -1766,6 +1797,61 @@ export function App() {
         customerName={reviewModalData.customerName}
         globalSettings={globalSettings}
       />
+
+      {/* Banner / Toast Interativo: Pedido Recém Entregue para Avaliação Imediata */}
+      <AnimatePresence>
+        {deliveredOrderPrompt && (
+          <motion.div
+            initial={{ y: 80, opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 80, opacity: 0, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            className="fixed bottom-20 sm:bottom-6 right-3 left-3 sm:left-auto sm:max-w-md z-50 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-2xl border-2 border-brand-gold/60 ring-4 ring-brand-wine/10"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-brand-wine text-brand-gold flex items-center justify-center shrink-0 shadow-md">
+                <Star className="w-5 h-5 fill-brand-gold animate-bounce" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black uppercase tracking-wider text-brand-wine">
+                      Pedido Entregue! 🎉
+                    </span>
+                    <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Novo
+                    </span>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => setDeliveredOrderPrompt(null)}
+                    className="text-neutral-400 hover:text-neutral-600 p-1 -mr-1 rounded-lg hover:bg-neutral-100 transition-colors"
+                    title="Fechar notificação"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-neutral-600 mt-1">
+                  Olá, <strong>{deliveredOrderPrompt.customerName}</strong>! Seus doces gourmet acabaram de ser entregues. Que tal deixar sua nota de 1 a 5 estrelas e um comentário rápido?
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHighlightTrackingOrderId(deliveredOrderPrompt.orderId);
+                      setView('tracking');
+                      setDeliveredOrderPrompt(null);
+                    }}
+                    className="flex-1 py-2.5 px-3 bg-brand-wine hover:bg-black text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                  >
+                    <Star className="w-3.5 h-3.5 fill-brand-gold" /> Avaliar Agora (1 a 5 ⭐)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1940,6 +2026,7 @@ function AdminView({
   // Automated 48h Reminders state & hook
   const [isRemindersModalOpen, setIsRemindersModalOpen] = useState(false);
   const [selectedReminderOrderId, setSelectedReminderOrderId] = useState<string | null>(null);
+  const [isVerifiedPhonesModalOpen, setIsVerifiedPhonesModalOpen] = useState(false);
 
   const {
     pendingOrdersOver48h,
@@ -2562,6 +2649,16 @@ function AdminView({
 
                 <button
                   type="button"
+                  onClick={() => setIsVerifiedPhonesModalOpen(true)}
+                  className="flex-1 sm:flex-initial px-3.5 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-all min-h-[38px] active:scale-95 cursor-pointer"
+                  title="Gerenciar e auditar números de WhatsApp verificados contra pedidos falsos"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Telefones Verificados</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => exportSalesToCsv({
                     orders: filteredOrders,
                     productCosts,
@@ -2787,6 +2884,12 @@ function AdminView({
         pastOrders={orders}
         globalSettings={globalSettings}
         onSubmitManualOrder={onCreateManualOrder || (async () => null)}
+      />
+
+      {/* Modal de Gestão de Telefones de WhatsApp Verificados */}
+      <AdminVerifiedPhonesModal
+        isOpen={isVerifiedPhonesModalOpen}
+        onClose={() => setIsVerifiedPhonesModalOpen(false)}
       />
 
       {/* Modal de Agendamento & Disparo de Lembretes Automáticos (> 48h) */}

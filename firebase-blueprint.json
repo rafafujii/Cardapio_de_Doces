@@ -22,7 +22,10 @@
         "scheduledReminderMessage": { "type": "string", "description": "Customized message for the scheduled reminder" },
         "scheduledReminderStatus": { "type": "string", "enum": ["none", "scheduled", "sent", "cancelled"], "description": "Current status of the scheduled reminder" },
         "lastReminderSentAt": { "type": "string", "format": "date-time", "description": "Timestamp when the last reminder was sent" },
-        "reminderCount": { "type": "number", "description": "Total number of reminders sent to customer" }
+        "reminderCount": { "type": "number", "description": "Total number of reminders sent to customer" },
+        "rating": { "type": "number", "description": "Customer rating from 1 to 5" },
+        "reviewComment": { "type": "string", "description": "Customer feedback comment on delivery" },
+        "reviewedAt": { "type": "string", "format": "date-time", "description": "Timestamp when the customer reviewed the order" }
       },
       "required": ["customerName", "date", "time", "items", "total", "createdAt"]
     },

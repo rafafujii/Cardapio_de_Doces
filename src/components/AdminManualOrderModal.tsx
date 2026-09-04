@@ -440,7 +440,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           transition={{ duration: 0.2 }}
-          className="bg-white dark:bg-neutral-900 w-full max-w-5xl rounded-3xl shadow-2xl border border-neutral-100 dark:border-neutral-800 overflow-hidden my-auto max-h-[94vh] flex flex-col"
+          className="bg-neutral-50 dark:bg-neutral-900 w-full max-w-5xl rounded-3xl shadow-2xl border border-neutral-200/80 dark:border-neutral-800 overflow-hidden my-auto max-h-[94vh] flex flex-col"
         >
           {/* Header */}
           <div className="p-4 sm:p-6 bg-gradient-to-r from-brand-wine via-[#6a001a] to-brand-wine text-white flex items-center justify-between gap-4 shrink-0 shadow-sm">
@@ -458,7 +458,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                   </span>
                 </div>
                 <p className="text-xs text-white/80 mt-0.5 line-clamp-1">
-                  Cadastre pedidos de clientes que pediram por WhatsApp, telefone ou balcão sem usar o cardápio.
+                  Cadastre pedidos de clientes recebidos por WhatsApp, telefone ou balcão sem passar pelo cardápio.
                 </p>
               </div>
             </div>
@@ -481,20 +481,24 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
               <div className="lg:col-span-7 space-y-6">
                 
                 {/* Section 1: Dados do Cliente */}
-                <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/80 space-y-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200/90 dark:border-neutral-700/80 shadow-xs space-y-4">
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-brand-wine dark:text-brand-gold flex items-center gap-1.5">
-                      <User className="w-4 h-4" />
-                      1. Dados do Cliente & Origem
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-brand-wine/10 dark:bg-brand-gold/15 text-brand-wine dark:text-brand-gold">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 dark:text-neutral-100">
+                        1. Dados do Cliente & Origem
+                      </h4>
+                    </div>
                     
                     {/* Origem */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] font-bold text-neutral-400">Origem:</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400">Origem:</span>
                       <select
                         value={origin}
                         onChange={(e: any) => setOrigin(e.target.value)}
-                        className="text-xs font-bold bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg px-2 py-1 text-neutral-800 dark:text-neutral-200 outline-hidden"
+                        className="text-xs font-bold bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-2.5 py-1 text-neutral-800 dark:text-neutral-200 outline-hidden transition-colors cursor-pointer"
                       >
                         <option value="WhatsApp">📱 WhatsApp</option>
                         <option value="Balcão">🏪 Balcão / Cozinha</option>
@@ -519,7 +523,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                           }}
                           onFocus={() => setShowClientSuggestions(true)}
                           placeholder="Buscar cliente frequente cadastrado no CRM..."
-                          className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-800 dark:text-neutral-200 placeholder:text-neutral-400 outline-hidden focus:ring-1 focus:ring-brand-gold"
+                          className="w-full pl-8 pr-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 outline-hidden focus:border-brand-wine dark:focus:border-brand-gold transition-colors"
                         />
                       </div>
 
@@ -535,7 +539,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                               <div>
                                 <span className="font-bold text-neutral-900 dark:text-white">{client.name}</span>
                                 {client.address && (
-                                  <span className="block text-[10px] text-neutral-400 truncate max-w-xs">{client.address}</span>
+                                  <span className="block text-[10px] text-neutral-500 dark:text-neutral-400 truncate max-w-xs">{client.address}</span>
                                 )}
                               </div>
                               {client.phone && (
@@ -552,7 +556,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-neutral-600 dark:text-neutral-300 mb-1">
+                      <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                         Nome do Cliente *
                       </label>
                       <input
@@ -561,12 +565,12 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="Ex: Maria Eduarda Silva"
                         required
-                        className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-2 focus:ring-brand-wine/20 focus:border-brand-wine"
+                        className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-2 focus:ring-brand-wine/10 focus:border-brand-wine dark:focus:border-brand-gold transition-all"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-neutral-600 dark:text-neutral-300 mb-1">
+                      <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                         WhatsApp / Telefone
                       </label>
                       <input
@@ -574,30 +578,34 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                         value={customerPhone}
                         onChange={(e) => setCustomerPhone(e.target.value)}
                         placeholder="Ex: (44) 99854-2446"
-                        className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-2 focus:ring-brand-wine/20 focus:border-brand-wine"
+                        className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-2 focus:ring-brand-wine/10 focus:border-brand-wine dark:focus:border-brand-gold transition-all"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Section 2: Agendamento & Entrega */}
-                <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/80 space-y-4">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-wine dark:text-brand-gold flex items-center gap-1.5">
-                    <Calendar className="w-4 h-4" />
-                    2. Data, Horário & Retirada/Entrega
-                  </h4>
+                <div className="p-4 sm:p-5 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200/90 dark:border-neutral-700/80 shadow-xs space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-brand-wine/10 dark:bg-brand-gold/15 text-brand-wine dark:text-brand-gold">
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 dark:text-neutral-100">
+                      2. Data, Horário & Retirada/Entrega
+                    </h4>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-[11px] font-bold text-neutral-600 dark:text-neutral-300">
+                        <label className="text-[11px] font-bold text-neutral-700 dark:text-neutral-300">
                           Data do Pedido
                         </label>
                         <div className="flex gap-1">
                           <button
                             type="button"
                             onClick={() => setDate(todayStr)}
-                            className="text-[10px] font-bold px-1.5 py-0.5 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded-md hover:bg-brand-wine hover:text-white transition-colors"
+                            className="text-[10px] font-bold px-2 py-0.5 bg-neutral-100 hover:bg-brand-wine hover:text-white dark:bg-neutral-800 dark:hover:bg-brand-wine text-neutral-700 dark:text-neutral-300 rounded-md transition-colors cursor-pointer border border-neutral-200/60 dark:border-neutral-700"
                           >
                             Hoje
                           </button>
@@ -608,7 +616,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                               d.setDate(d.getDate() + 1);
                               setDate(d.toISOString().split('T')[0]);
                             }}
-                            className="text-[10px] font-bold px-1.5 py-0.5 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 rounded-md hover:bg-brand-wine hover:text-white transition-colors"
+                            className="text-[10px] font-bold px-2 py-0.5 bg-neutral-100 hover:bg-brand-wine hover:text-white dark:bg-neutral-800 dark:hover:bg-brand-wine text-neutral-700 dark:text-neutral-300 rounded-md transition-colors cursor-pointer border border-neutral-200/60 dark:border-neutral-700"
                           >
                             Amanhã
                           </button>
@@ -618,12 +626,12 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                         type="date"
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/20 focus:border-brand-wine"
+                        className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/10 focus:border-brand-wine transition-all"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-neutral-600 dark:text-neutral-300 mb-1">
+                      <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                         Horário Previsto
                       </label>
                       <input
@@ -631,22 +639,22 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                         value={time}
                         onChange={(e) => setTime(e.target.value)}
                         placeholder="Ex: 14:30 ou A Combinar"
-                        className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/20 focus:border-brand-wine"
+                        className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/10 focus:border-brand-wine transition-all"
                       />
                     </div>
                   </div>
 
                   {/* Modalidade de Entrega */}
                   <div className="space-y-3 pt-2 border-t border-neutral-200 dark:border-neutral-700">
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => setDeliveryType('pickup')}
                         className={cn(
-                          "flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer",
+                          "py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer",
                           deliveryType === 'pickup'
-                            ? "bg-brand-wine text-white border-brand-wine shadow-sm"
-                            : "bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-300 dark:border-neutral-700"
+                            ? "bg-brand-wine text-white border-brand-wine shadow-xs"
+                            : "bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700"
                         )}
                       >
                         <Store className="w-4 h-4" />
@@ -657,10 +665,10 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                         type="button"
                         onClick={() => setDeliveryType('delivery')}
                         className={cn(
-                          "flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer",
+                          "py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border transition-all cursor-pointer",
                           deliveryType === 'delivery'
-                            ? "bg-brand-wine text-white border-brand-wine shadow-sm"
-                            : "bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-300 dark:border-neutral-700"
+                            ? "bg-brand-wine text-white border-brand-wine shadow-xs"
+                            : "bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700"
                         )}
                       >
                         <Bike className="w-4 h-4" />
@@ -671,7 +679,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                     {deliveryType === 'delivery' && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 animate-in fade-in">
                         <div className="sm:col-span-2">
-                          <label className="block text-[11px] font-bold text-neutral-600 dark:text-neutral-300 mb-1">
+                          <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                             Endereço de Entrega *
                           </label>
                           <input
@@ -679,12 +687,12 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             value={deliveryAddress}
                             onChange={(e) => setDeliveryAddress(e.target.value)}
                             placeholder="Rua, número, bairro, complemento..."
-                            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/20 focus:border-brand-wine"
+                            className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/10 focus:border-brand-wine transition-all"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-bold text-neutral-600 dark:text-neutral-300 mb-1">
+                          <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 mb-1">
                             Taxa de Entrega (R$)
                           </label>
                           <input
@@ -694,7 +702,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             value={deliveryFee || ''}
                             onChange={(e) => setDeliveryFee(parseFloat(e.target.value) || 0)}
                             placeholder="0,00"
-                            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/20 focus:border-brand-wine"
+                            className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-hidden focus:ring-2 focus:ring-brand-wine/10 focus:border-brand-wine transition-all"
                           />
                         </div>
                       </div>
@@ -703,17 +711,21 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                 </div>
 
                 {/* Section 3: Adicionar Produtos do Cardápio & Itens Especiais */}
-                <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/80 space-y-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200/90 dark:border-neutral-700/80 shadow-xs space-y-4">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-brand-wine dark:text-brand-gold flex items-center gap-1.5">
-                      <ShoppingBag className="w-4 h-4" />
-                      3. Escolher Doces & Itens do Pedido
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-brand-wine/10 dark:bg-brand-gold/15 text-brand-wine dark:text-brand-gold">
+                        <ShoppingBag className="w-4 h-4" />
+                      </div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 dark:text-neutral-100">
+                        3. Escolher Doces & Itens do Pedido
+                      </h4>
+                    </div>
 
                     <button
                       type="button"
                       onClick={() => setShowCustomItemForm(prev => !prev)}
-                      className="px-2.5 py-1 bg-brand-gold text-brand-wine rounded-lg text-xs font-black uppercase tracking-wider hover:bg-brand-gold/90 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                      className="px-2.5 py-1.5 bg-brand-wine/10 hover:bg-brand-wine text-brand-wine hover:text-white dark:bg-brand-gold/15 dark:text-brand-gold dark:hover:bg-brand-gold dark:hover:text-brand-wine border border-brand-wine/20 dark:border-brand-gold/30 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <PackagePlus className="w-3.5 h-3.5" />
                       <span>{showCustomItemForm ? 'Fechar Item Avulso' : '+ Item Avulso / Especial'}</span>
@@ -722,10 +734,10 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
 
                   {/* Form for Custom / Special Item */}
                   {showCustomItemForm && (
-                    <form onSubmit={handleAddCustomItem} className="p-3.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-300/80 rounded-2xl space-y-3 animate-in fade-in">
+                    <form onSubmit={handleAddCustomItem} className="p-3.5 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-2xl space-y-3 animate-in fade-in">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1">
-                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                           Item Fora do Cardápio (Ex: Bolo de Aniversário, Vela, Embalagem Especial)
                         </span>
                       </div>
@@ -737,7 +749,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             value={customItemName}
                             onChange={(e) => setCustomItemName(e.target.value)}
                             placeholder="Nome do doce ou produto avulso..."
-                            className="w-full px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs"
+                            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-amber-200/90 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-1 focus:ring-amber-500"
                           />
                         </div>
                         <div>
@@ -747,7 +759,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             value={customItemQty}
                             onChange={(e) => setCustomItemQty(parseInt(e.target.value) || 1)}
                             placeholder="Qtd"
-                            className="w-full px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs"
+                            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-amber-200/90 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-1 focus:ring-amber-500"
                           />
                         </div>
                         <div>
@@ -756,7 +768,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             value={customItemPrice}
                             onChange={(e) => setCustomItemPrice(e.target.value)}
                             placeholder="Preço un (R$)"
-                            className="w-full px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs"
+                            className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-amber-200/90 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-1 focus:ring-amber-500"
                           />
                         </div>
                       </div>
@@ -767,11 +779,11 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                           value={customItemNotes}
                           onChange={(e) => setCustomItemNotes(e.target.value)}
                           placeholder="Observações do item (opcional)..."
-                          className="flex-1 px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs"
+                          className="flex-1 px-3 py-2 bg-white dark:bg-neutral-800 border border-amber-200/90 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-1 focus:ring-amber-500"
                         />
                         <button
                           type="submit"
-                          className="px-4 py-1.5 bg-brand-wine text-white rounded-xl text-xs font-bold hover:bg-black transition-colors cursor-pointer shrink-0"
+                          className="px-4 py-2 bg-brand-wine hover:bg-[#600018] text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
                         >
                           Adicionar Item
                         </button>
@@ -788,14 +800,14 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                         value={productSearch}
                         onChange={(e) => setProductSearch(e.target.value)}
                         placeholder="Buscar doce pelo nome (ex: brigadeiro, ninho, pistache)..."
-                        className="w-full pl-8 pr-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-hidden focus:ring-1 focus:ring-brand-gold"
+                        className="w-full pl-8 pr-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:ring-2 focus:ring-brand-wine/10 focus:border-brand-wine transition-all"
                       />
                     </div>
 
                     <select
                       value={selectedCategory}
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-700 dark:text-neutral-300 outline-hidden"
+                      className="px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-800 dark:text-neutral-200 outline-hidden transition-all cursor-pointer"
                     >
                       <option value="all">Todas Categorias</option>
                       {categories.map(cat => (
@@ -806,9 +818,9 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
 
                   {/* Ready boxes quick pills if available */}
                   {readyBoxes.filter(b => b.active && b.quantityAvailable > 0).length > 0 && (
-                    <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800/50 space-y-1.5">
-                      <span className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-300 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-500" />
+                    <div className="p-3 bg-amber-50/40 dark:bg-amber-950/20 rounded-xl border border-amber-200/80 dark:border-amber-800/40 space-y-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                         Doces de Hoje / Pronta Entrega:
                       </span>
                       <div className="flex flex-wrap gap-1.5">
@@ -817,11 +829,11 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             key={box.id}
                             type="button"
                             onClick={() => handleAddReadyBox(box)}
-                            className="px-2.5 py-1 bg-white dark:bg-neutral-800 hover:bg-amber-100 text-amber-950 dark:text-amber-100 border border-amber-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1.5 bg-white dark:bg-neutral-800 hover:border-amber-400 text-neutral-800 dark:text-neutral-100 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
                           >
-                            <Plus className="w-3 h-3 text-amber-600" />
+                            <Plus className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                             <span>{box.title}</span>
-                            <span className="text-[10px] font-mono text-emerald-700 font-black">{formatCurrency(box.price)}</span>
+                            <span className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 font-bold">{formatCurrency(box.price)}</span>
                           </button>
                         ))}
                       </div>
@@ -829,7 +841,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                   )}
 
                   {/* Products Grid (Fast Click-to-Add) */}
-                  <div className="max-h-56 overflow-y-auto pr-1 space-y-1.5 divide-y divide-neutral-100 dark:divide-neutral-800">
+                  <div className="max-h-56 overflow-y-auto pr-1 space-y-1 divide-y divide-neutral-100 dark:divide-neutral-800">
                     {filteredProducts.slice(0, 30).map(({ product, categoryName }) => {
                       const unitPrice = getProductUnitPrice(product);
                       const centoPrice = product.priceCento || (unitPrice * 100);
@@ -837,13 +849,13 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                       return (
                         <div
                           key={product.id}
-                          className="pt-1.5 first:pt-0 flex items-center justify-between gap-3 text-xs"
+                          className="p-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 rounded-xl transition-colors flex items-center justify-between gap-3 text-xs"
                         >
                           <div className="min-w-0 flex-1">
                             <span className="font-bold text-neutral-900 dark:text-white block truncate">
                               {product.name}
                             </span>
-                            <span className="text-[10px] text-neutral-400">
+                            <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
                               {categoryName} • Un: {formatCurrency(unitPrice)}{product.priceCento ? ` • Cento: ${formatCurrency(centoPrice)}` : ''}
                             </span>
                           </div>
@@ -853,7 +865,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             <button
                               type="button"
                               onClick={() => handleAddCatalogProduct(product, true)}
-                              className="px-2.5 py-1 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 hover:border-brand-wine hover:text-brand-wine rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                              className="px-2.5 py-1.5 bg-neutral-100 hover:bg-brand-wine hover:text-white dark:bg-neutral-800 dark:hover:bg-brand-wine text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                               title="Adicionar 1 Unidade"
                             >
                               <Plus className="w-3 h-3" />
@@ -865,7 +877,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                               <button
                                 type="button"
                                 onClick={() => handleAddCatalogProduct(product, false)}
-                                className="px-2 py-1 bg-brand-wine/10 hover:bg-brand-wine text-brand-wine hover:text-white rounded-lg text-[10px] font-black uppercase transition-colors cursor-pointer"
+                                className="px-2.5 py-1.5 bg-brand-wine/10 hover:bg-brand-wine text-brand-wine hover:text-white dark:bg-brand-gold/15 dark:text-brand-gold dark:hover:bg-brand-gold dark:hover:text-brand-wine rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
                                 title="Adicionar Cento (100 unidades)"
                               >
                                 +Cento
@@ -884,17 +896,21 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
               <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
                 
                 {/* Items in Cart / Summary */}
-                <div className="p-4 sm:p-5 bg-white dark:bg-neutral-850 rounded-2xl border-2 border-brand-wine/20 dark:border-brand-gold/30 shadow-sm space-y-4">
+                <div className="p-4 sm:p-5 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200/90 dark:border-neutral-700/80 shadow-xs space-y-4">
                   <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-700">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-brand-wine dark:text-brand-gold flex items-center gap-1.5">
-                      <ShoppingBag className="w-4 h-4" />
-                      Itens do Pedido ({orderItems.reduce((s, i) => s + i.quantity, 0)})
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-brand-wine/10 dark:bg-brand-gold/15 text-brand-wine dark:text-brand-gold">
+                        <ShoppingBag className="w-4 h-4" />
+                      </div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 dark:text-neutral-100">
+                        Itens do Pedido ({orderItems.reduce((s, i) => s + i.quantity, 0)})
+                      </h4>
+                    </div>
                     {orderItems.length > 0 && (
                       <button
                         type="button"
                         onClick={() => setOrderItems([])}
-                        className="text-[10px] text-red-500 hover:underline cursor-pointer"
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-800 dark:text-rose-400 hover:underline cursor-pointer"
                       >
                         Limpar Itens
                       </button>
@@ -903,51 +919,51 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
 
                   {orderItems.length === 0 ? (
                     <div className="py-8 text-center text-neutral-400 space-y-1">
-                      <ShoppingBag className="w-8 h-8 mx-auto stroke-[1.2] text-neutral-300" />
-                      <p className="text-xs">Nenhum item adicionado ainda.</p>
-                      <p className="text-[10px] text-neutral-400">Clique nos doces ao lado ou em '+ Item Avulso'.</p>
+                      <ShoppingBag className="w-8 h-8 mx-auto stroke-[1.2] text-neutral-300 dark:text-neutral-600" />
+                      <p className="text-xs text-neutral-600 dark:text-neutral-400 font-medium">Nenhum item adicionado ainda.</p>
+                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Clique nos doces ao lado ou em '+ Item Avulso'.</p>
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-56 overflow-y-auto pr-1 divide-y divide-neutral-100 dark:divide-neutral-800">
                       {orderItems.map((item, index) => (
-                        <div key={index} className="pt-2 first:pt-0 flex items-start justify-between gap-2">
+                        <div key={index} className="pt-2.5 first:pt-0 flex items-start justify-between gap-2.5">
                           <div className="flex-1 min-w-0">
                             <span className="font-bold text-neutral-900 dark:text-white text-xs block truncate">
                               {item.name}
                             </span>
                             {item.notes && (
-                              <span className="text-[10px] text-neutral-400 italic block">{item.notes}</span>
+                              <span className="text-[10px] text-neutral-500 dark:text-neutral-400 italic block">{item.notes}</span>
                             )}
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[10px] text-neutral-500">Un: R$</span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[10px] font-medium text-neutral-500 dark:text-neutral-400">Un: R$</span>
                               <input
                                 type="number"
                                 step="0.10"
                                 min="0"
                                 value={item.price}
                                 onChange={(e) => handleUpdateItemPrice(index, parseFloat(e.target.value) || 0)}
-                                className="w-16 px-1.5 py-0.5 bg-neutral-100 dark:bg-neutral-800 rounded text-[11px] font-mono border border-neutral-200 dark:border-neutral-700"
+                                className="w-16 px-1.5 py-0.5 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 rounded-md text-xs font-mono font-bold text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700 text-center outline-hidden"
                                 title="Preço unitário editável"
                               />
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            <div className="flex items-center border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50 dark:bg-neutral-800 overflow-hidden">
+                            <div className="flex items-center border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50 dark:bg-neutral-800 overflow-hidden shadow-2xs">
                               <button
                                 type="button"
                                 onClick={() => handleUpdateItemQuantity(index, -1)}
-                                className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-600 transition-colors"
+                                className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors"
                               >
                                 <Minus className="w-3 h-3" />
                               </button>
-                              <span className="px-2 text-xs font-bold font-mono">
+                              <span className="px-2 text-xs font-black font-mono text-neutral-900 dark:text-white">
                                 {item.quantity}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateItemQuantity(index, 1)}
-                                className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-600 transition-colors"
+                                className="p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors"
                               >
                                 <Plus className="w-3 h-3" />
                               </button>
@@ -960,7 +976,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                             <button
                               type="button"
                               onClick={() => handleRemoveItem(index)}
-                              className="text-neutral-400 hover:text-red-500 transition-colors p-1"
+                              className="text-neutral-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors p-1"
                               title="Remover"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -972,8 +988,8 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                   )}
 
                   {/* Desconto Manual */}
-                  <div className="pt-2 border-t border-neutral-100 dark:border-neutral-700 flex items-center justify-between gap-3">
-                    <span className="text-xs font-bold text-neutral-600 dark:text-neutral-300 flex items-center gap-1">
+                  <div className="pt-2.5 border-t border-neutral-100 dark:border-neutral-700 flex items-center justify-between gap-3 p-2 bg-neutral-50/60 dark:bg-neutral-800/30 rounded-xl border border-neutral-200/60 dark:border-neutral-700/60">
+                    <span className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
                       <Tag className="w-3.5 h-3.5 text-brand-gold" />
                       Desconto Especial (R$):
                     </span>
@@ -984,51 +1000,55 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                       value={discountAmount || ''}
                       onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
                       placeholder="0,00"
-                      className="w-24 px-2 py-1 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs font-mono text-right"
+                      className="w-24 px-2 py-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-mono font-bold text-neutral-900 dark:text-white text-right outline-hidden focus:border-brand-wine"
                     />
                   </div>
 
                   {/* Financial Totals Breakdown */}
-                  <div className="bg-neutral-50 dark:bg-neutral-800 p-3 rounded-xl space-y-1 text-xs">
-                    <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
+                  <div className="bg-gradient-to-br from-neutral-50 to-neutral-100/70 dark:from-neutral-800 dark:to-neutral-850 p-3.5 rounded-xl border border-neutral-200/80 dark:border-neutral-700/80 space-y-1.5 text-xs">
+                    <div className="flex justify-between text-neutral-600 dark:text-neutral-400 font-medium">
                       <span>Subtotal Itens:</span>
-                      <span className="font-mono font-bold">{formatCurrency(subtotal)}</span>
+                      <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">{formatCurrency(subtotal)}</span>
                     </div>
                     {deliveryType === 'delivery' && (
-                      <div className="flex justify-between text-neutral-600 dark:text-neutral-400">
+                      <div className="flex justify-between text-neutral-600 dark:text-neutral-400 font-medium">
                         <span>Taxa de Entrega:</span>
-                        <span className="font-mono font-bold">{formatCurrency(deliveryFee)}</span>
+                        <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">{formatCurrency(deliveryFee)}</span>
                       </div>
                     )}
                     {discountAmount > 0 && (
-                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                      <div className="flex justify-between text-emerald-700 dark:text-emerald-400 font-bold">
                         <span>Desconto Aplicado:</span>
                         <span className="font-mono">-{formatCurrency(discountAmount)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-sm font-black text-brand-wine dark:text-brand-gold pt-1 border-t border-neutral-200 dark:border-neutral-700">
-                      <span>VALOR TOTAL:</span>
-                      <span className="font-mono text-base">{formatCurrency(finalTotal)}</span>
+                    <div className="flex justify-between items-baseline pt-2 border-t border-neutral-200 dark:border-neutral-700">
+                      <span className="text-xs font-bold uppercase tracking-wider text-neutral-800 dark:text-neutral-200">VALOR TOTAL:</span>
+                      <span className="font-mono text-lg font-black text-brand-wine dark:text-brand-gold">{formatCurrency(finalTotal)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Section 4: Pagamento, Status & Observações */}
-                <div className="p-4 sm:p-5 bg-neutral-50 dark:bg-neutral-850 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/80 space-y-3">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-brand-wine dark:text-brand-gold flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4" />
-                    4. Pagamento & Status
-                  </h4>
+                <div className="p-4 sm:p-5 bg-white dark:bg-neutral-850 rounded-2xl border border-neutral-200/90 dark:border-neutral-700/80 shadow-xs space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-brand-wine/10 dark:bg-brand-gold/15 text-brand-wine dark:text-brand-gold">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 dark:text-neutral-100">
+                      4. Pagamento & Status
+                    </h4>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-neutral-600 dark:text-neutral-400 mb-1">
                         Forma de Pagamento
                       </label>
                       <select
                         value={paymentMethod}
                         onChange={(e: any) => setPaymentMethod(e.target.value)}
-                        className="w-full px-2 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs font-bold"
+                        className="w-full px-2.5 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-800 dark:text-white outline-hidden transition-all cursor-pointer"
                       >
                         <option value="Pix">Pix</option>
                         <option value="Dinheiro">Dinheiro</option>
@@ -1039,17 +1059,17 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-neutral-600 dark:text-neutral-400 mb-1">
                         Status do Pagamento
                       </label>
                       <select
                         value={paymentStatus}
                         onChange={(e: any) => setPaymentStatus(e.target.value)}
                         className={cn(
-                          "w-full px-2 py-1.5 border rounded-lg text-xs font-bold",
+                          "w-full px-2.5 py-2 border rounded-xl text-xs font-bold outline-hidden transition-all cursor-pointer",
                           paymentStatus === 'paid' 
-                            ? "bg-emerald-50 text-emerald-800 border-emerald-300" 
-                            : "bg-amber-50 text-amber-800 border-amber-300"
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800" 
+                            : "bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
                         )}
                       >
                         <option value="pending">⏳ A Pagar (Pendente)</option>
@@ -1060,7 +1080,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
 
                   {paymentMethod === 'Dinheiro' && (
                     <div>
-                      <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                      <label className="block text-[10px] font-bold text-neutral-600 dark:text-neutral-400 mb-1">
                         Troco para quanto?
                       </label>
                       <input
@@ -1068,20 +1088,20 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                         value={changeAmount}
                         onChange={(e) => setChangeAmount(e.target.value)}
                         placeholder="Ex: R$ 50,00 ou Não precisa"
-                        className="w-full px-2 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs"
+                        className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:border-brand-wine transition-all"
                       />
                     </div>
                   )}
 
                   {/* Initial Order Status */}
                   <div>
-                    <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                    <label className="block text-[10px] font-bold text-neutral-600 dark:text-neutral-400 mb-1">
                       Status Inicial do Pedido na Esteira
                     </label>
                     <select
                       value={orderStatus}
                       onChange={(e: any) => setOrderStatus(e.target.value)}
-                      className="w-full px-2 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs font-bold"
+                      className="w-full px-2.5 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-800 dark:text-white outline-hidden transition-all cursor-pointer"
                     >
                       <option value="pending">🟡 Pendente (Aguardando)</option>
                       <option value="preparing">🔵 Em Produção (Cozinha)</option>
@@ -1092,7 +1112,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
 
                   {/* Notes */}
                   <div>
-                    <label className="block text-[10px] font-bold text-neutral-500 mb-0.5">
+                    <label className="block text-[10px] font-bold text-neutral-600 dark:text-neutral-400 mb-1">
                       Observações / Detalhes Especiais
                     </label>
                     <textarea
@@ -1100,7 +1120,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                       onChange={(e) => setNotes(e.target.value)}
                       rows={2}
                       placeholder="Ex: Sem amendoim, colocar fita vermelha, cliente vai retirar às 15h..."
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs placeholder:text-neutral-400 outline-hidden"
+                      className="w-full px-3 py-2 bg-neutral-50 hover:bg-white focus:bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 outline-hidden focus:border-brand-wine transition-all"
                     />
                   </div>
                 </div>
@@ -1113,7 +1133,7 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => handleSubmit('save_and_whatsapp')}
-                      className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
+                      className="w-full py-3 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
                       title="Salvar no banco e abrir WhatsApp com recibo pronto"
                     >
                       <MessageCircle className="w-4 h-4" />
@@ -1125,10 +1145,10 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => handleSubmit('save_and_pdf')}
-                      className="w-full py-3 px-3 bg-brand-wine hover:bg-black text-brand-gold rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
+                      className="w-full py-3 px-3 bg-brand-wine hover:bg-[#600018] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-brand-wine/20 transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
                       title="Salvar no banco e baixar comprovante PDF"
                     >
-                      <Download className="w-4 h-4" />
+                      <Download className="w-4 h-4 text-brand-gold-light" />
                       <span>Salvar + PDF</span>
                     </button>
                   </div>
@@ -1138,9 +1158,9 @@ Muito obrigado pela preferência e confiança! Qualquer dúvida estamos à dispo
                     type="button"
                     disabled={isSubmitting}
                     onClick={() => handleSubmit('save_only')}
-                    className="w-full py-2.5 px-4 bg-neutral-900 hover:bg-black dark:bg-neutral-800 dark:hover:bg-neutral-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
+                    className="w-full py-2.5 px-4 bg-white hover:bg-neutral-50 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-white border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-2xs transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
                   >
-                    <Check className="w-4 h-4 text-emerald-400" />
+                    <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span>Apenas Salvar no Sistema</span>
                   </button>
                 </div>

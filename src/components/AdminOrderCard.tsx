@@ -175,8 +175,9 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
             )}
             <div className="flex items-center gap-1.5 flex-wrap">
               {order.status === 'pending' && !isPendingOverdue && (
-                <span className="text-[10px] font-black px-2 py-0.5 bg-brand-gold/10 text-brand-wine rounded-full border border-brand-gold/20">
-                  PENDENTE
+                <span className="text-[10px] font-black px-2 py-0.5 bg-brand-gold/15 text-brand-wine rounded-full border border-brand-gold/30 flex items-center gap-1" title="Pedido recebido aguardando envio da mensagem pelo WhatsApp para iniciar produção">
+                  <Clock className="w-2.5 h-2.5 text-brand-gold" />
+                  AGUARDANDO WHATSAPP
                 </span>
               )}
               {order.status === 'pending' && isPendingOverdue && (
@@ -216,6 +217,12 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                 <span className="text-[10px] font-black px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full flex items-center gap-1" title="Pedido lançado manualmente (fora do cardápio)">
                   <ClipboardPen className="w-3 h-3 text-indigo-600" />
                   {order.origin ? order.origin.toUpperCase() : 'MANUAL'}
+                </span>
+              )}
+              {Boolean(order.rating) && (
+                <span className="text-[10px] font-black px-2.5 py-0.5 bg-amber-50 text-amber-900 border border-amber-300 rounded-full flex items-center gap-1 shadow-2xs" title={`Avaliação do cliente: ${order.rating}/5 estrelas`}>
+                  <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                  {order.rating}/5 ⭐
                 </span>
               )}
             </div>
@@ -309,6 +316,40 @@ export const AdminOrderCard: React.FC<AdminOrderCardProps> = ({
                   {order.notes && (
                     <div className="p-3 bg-white/80 rounded-xl border border-brand-wine/10 text-xs italic text-neutral-500">
                       <span className="font-bold text-brand-wine not-italic mr-1">Obs:</span> {order.notes}
+                    </div>
+                  )}
+
+                  {Boolean(order.rating) && (
+                    <div className="p-3.5 bg-gradient-to-r from-amber-50/90 via-amber-50/60 to-yellow-50/40 rounded-xl border border-amber-300/80 text-xs text-neutral-800 flex items-start gap-3 shadow-2xs">
+                      <div className="p-2 bg-amber-100 text-amber-800 rounded-lg shrink-0 shadow-inner">
+                        <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-black text-[10px] uppercase tracking-wider text-amber-900">
+                            Avaliação do Cliente
+                          </span>
+                          <div className="flex items-center text-amber-400">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star 
+                                key={s} 
+                                className={cn(
+                                  "w-3.5 h-3.5",
+                                  (order.rating || 0) >= s ? "fill-amber-400 text-amber-400" : "text-neutral-200 fill-neutral-100"
+                                )} 
+                              />
+                            ))}
+                          </div>
+                          <span className="text-xs font-black text-amber-950 font-mono">
+                            {order.rating}/5 estrelas
+                          </span>
+                        </div>
+                        {order.reviewComment && (
+                          <div className="mt-1.5 p-2 bg-white/80 rounded-lg border border-amber-200/60 text-neutral-700 italic text-xs">
+                            "{order.reviewComment}"
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 

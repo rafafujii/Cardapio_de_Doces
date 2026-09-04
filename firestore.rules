@@ -48,8 +48,11 @@ service cloud.firestore {
       allow get: if true;
       allow list: if isAdmin() || resource.data.testUserId != null;
       
-      // Admins can update status, mark as deleted, etc.
-      allow update: if isAdmin();
+      // Admins can update status, mark as deleted, etc. Customers can rate their delivered order.
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'reviewComment', 'reviewedAt']) &&
+        request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+      );
       
       // Admins can permanently delete
       allow delete: if isAdmin();
@@ -103,6 +106,18 @@ service cloud.firestore {
 
     match /audit_logs/{logId} {
       allow read, write: if isAdmin();
+    }
+
+    match /verified_phones/{phone} {
+      // Anyone can check if a phone is verified, or create/update verification record
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /phone_verifications/{phone} {
+      // Allow reading and writing temporary verification codes
+      allow read, write: if true;
     }
   }
 }
