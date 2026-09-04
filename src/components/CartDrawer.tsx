@@ -129,7 +129,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <div key={item.id} className="flex gap-4 p-4 bg-white rounded-2xl border border-neutral-100 shadow-sm">
                         <img src={item.imageUrl} alt={item.name} className="w-16 h-16 rounded-xl object-cover shrink-0" />
                         <div className="flex-grow min-w-0">
-                          <h4 className="font-medium text-sm truncate">{item.name}</h4>
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="font-medium text-sm truncate">{item.name}</h4>
+                            <button 
+                              type="button"
+                              onClick={() => onRemoveFromCart(item.id)}
+                              className="p-1 -mr-1 -mt-1 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                              title="Excluir item do pedido"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                           <div className="flex items-baseline gap-2">
                             <p className="text-brand-wine font-black text-sm">{formatCurrency(price * item.quantity)}</p>
                             <span className="text-[11px] text-neutral-400">({formatCurrency(item.priceCento || price * 100)} / cento)</span>
